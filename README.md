@@ -59,7 +59,6 @@ Configurable epoch parameters
 We welcome contributions! Please see our Contributing Guidelines for details.
 
 ## Security
-For security concerns, please email security@hetu-project.org
 
 ## License
-This project is licensed under [LICENSE NAME] - see the LICENSE file for details.
+See the LICENSE file for details.
