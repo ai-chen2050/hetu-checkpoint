@@ -51,16 +51,8 @@ Fixed number of blocks per epoch
 Consistent validator set within each epoch
 Configurable epoch parameters
 ### Security Features
-- BLS Signatures
-
-Efficient signature aggregation
-Reduced communication overhead
-Strong cryptographic security
-- DKG Protocol
-
-Distributed trust model
-No single point of failure
-Threshold-based security
+- BLS Signatures: Efficient signature aggregation Reduced communication overhead Strong cryptographic security
+- DKG Protocol: Distributed trust model No single point of failure Threshold-based security
 
 
 ## Contributing
