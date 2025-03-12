@@ -4,65 +4,79 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"os"
 	"sync"
 	"time"
+
+	"github.com/spf13/cobra"
+
+	"github.com/hetu-project/hetu-checkpoint/config"
+	"github.com/hetu-project/hetu-checkpoint/logger"
 )
 
-type Config struct {
-	DBHost     string `json:"db_host"`
-	DBPort     int    `json:"db_port"`
-	DBUser     string `json:"db_user"`
-	DBPassword string `json:"db_password"`
-	DBName     string `json:"db_name"`
-}
-
-var config Config
-var validators struct {
-	sync.RWMutex
-	connections map[net.Conn]bool
-	addresses   map[net.Conn]string
-}
+var (
+	configFile string
+	logLevel   string
+	validators struct {
+		sync.RWMutex
+		connections map[net.Conn]bool
+		addresses   map[net.Conn]string
+	}
+)
 
 func init() {
 	validators.connections = make(map[net.Conn]bool)
 	validators.addresses = make(map[net.Conn]string)
+
+	rootCmd.PersistentFlags().StringVar(&configFile, "config", "", "config file (default is ./config.json)")
+	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "INFO", "log level (DEBUG, INFO, WARN, ERROR, FATAL)")
 }
 
-func loadConfig() {
-	file, err := os.Open("docs/config/dis_config.json")
-	if err != nil {
-		log.Fatalf("Error opening config file: %v", err)
-	}
-	defer file.Close()
+var rootCmd = &cobra.Command{
+	Use:   "dispatcher",
+	Short: "Dispatcher service for BLS signing",
+	Long:  `Dispatcher service that coordinates validators for BLS signing operations.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		// Set log level
+		logger.SetLevel(logger.GetLevelFromString(logLevel))
+		logger.Info("Setting log level to %s", logLevel)
 
-	decoder := json.NewDecoder(file)
-	err = decoder.Decode(&config)
-	if err != nil {
-		log.Fatalf("Error decoding config file: %v", err)
-	}
+		// Load configuration
+		cfg, err := config.LoadDispatcherConfig(configFile)
+		if err != nil {
+			logger.Fatal("Failed to load configuration: %v", err)
+		}
+
+		// Start the server
+		startServer(cfg)
+	},
 }
 
-func main() {
-	loadConfig()
+func startServer(cfg *config.DispatcherConfig) {
+	httpPort := fmt.Sprintf(":%d", cfg.HTTPPort)
+	tcpPort := fmt.Sprintf(":%d", cfg.TCPPort)
 
 	http.HandleFunc("/reqblssign", handleRequest)
-	go http.ListenAndServe(":8080", nil)
+	go func() {
+		logger.Info("Starting HTTP server on port %d", cfg.HTTPPort)
+		if err := http.ListenAndServe(httpPort, nil); err != nil {
+			logger.Fatal("Error starting HTTP server: %v", err)
+		}
+	}()
 
-	listener, err := net.Listen("tcp", ":9090")
+	listener, err := net.Listen("tcp", tcpPort)
 	if err != nil {
-		log.Fatalf("Error starting TCP server: %v", err)
+		logger.Fatal("Error starting TCP server: %v", err)
 	}
 	defer listener.Close()
 
-	log.Println("The dispatcher is listening now, waiting for connected.")
+	logger.Info("The dispatcher is listening on TCP port %d, waiting for connections", cfg.TCPPort)
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			log.Printf("Error accepting connection: %v", err)
+			logger.Error("Error accepting connection: %v", err)
 			continue
 		}
 		go handleValidatorConnection(conn)
@@ -74,7 +88,7 @@ func handleValidatorConnection(conn net.Conn) {
 	buffer := make([]byte, 1024)
 	n, err := conn.Read(buffer)
 	if err != nil {
-		log.Printf("Error reading validator address: %v", err)
+		logger.Error("Error reading validator address: %v", err)
 		conn.Close()
 		return
 	}
@@ -85,9 +99,9 @@ func handleValidatorConnection(conn net.Conn) {
 	// Parse the ADDR: message
 	if len(data) > 5 && data[:5] == "ADDR:" {
 		validatorAddr = data[5:]
-		log.Printf("Validator registered with address: %s", validatorAddr)
+		logger.Info("Validator registered with address: %s", validatorAddr)
 	} else {
-		log.Printf("Invalid address format from validator: %s", data)
+		logger.Error("Invalid address format from validator: %s", data)
 		conn.Close()
 		return
 	}
@@ -101,32 +115,32 @@ func handleValidatorConnection(conn net.Conn) {
 	validators.addresses[conn] = validatorAddr
 	validators.Unlock()
 
-	log.Printf("New validator connected. Total validators: %d", len(validators.connections))
+	logger.Info("New validator connected. Total validators: %d", len(validators.connections))
 
 	// Handle connection until it's closed
 	for {
 		n, err := conn.Read(buffer)
 		if err != nil {
-			log.Printf("Validator disconnected: %v", err)
+			logger.Info("Validator disconnected: %v", err)
 			validators.Lock()
 			delete(validators.connections, conn)
 			delete(validators.addresses, conn)
 			conn.Close()
 			validators.Unlock()
-			log.Printf("Validator removed. Remaining validators: %d", len(validators.connections))
+			logger.Info("Validator removed. Remaining validators: %d", len(validators.connections))
 			return
 		}
 
 		data := string(buffer[:n])
 		if data != "ping" {
-			log.Printf("Received data from validator: %s", data)
+			logger.Debug("Received data from validator: %s", data)
 		}
 
 		// If it's a heartbeat, respond with pong
 		if data == "ping" {
 			_, err = conn.Write([]byte("pong"))
 			if err != nil {
-				log.Printf("Failed to send heartbeat response: %v", err)
+				logger.Error("Failed to send heartbeat response: %v", err)
 				validators.Lock()
 				delete(validators.connections, conn)
 				delete(validators.addresses, conn)
@@ -145,7 +159,7 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Received client request: %s", string(body))
+	logger.Info("Received client request: %s", string(body))
 
 	// Create separate connections for each validator
 	type ValidatorClient struct {
@@ -170,6 +184,7 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 	validators.RUnlock()
 
 	if validatorCount == 0 {
+		logger.Warn("No validators connected")
 		http.Error(w, "No validators connected", http.StatusInternalServerError)
 		return
 	}
@@ -224,7 +239,7 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			log.Printf("Received response from validator: %s", string(responseData))
+			logger.Debug("Received response from validator: %s", string(responseData))
 			results <- ValidatorResponse{Response: responseData}
 		}(vc.Addr)
 	}
@@ -239,14 +254,14 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 		select {
 		case result := <-results:
 			if result.Error != nil {
-				log.Printf("Validator error: %v", result.Error)
+				logger.Error("Validator error: %v", result.Error)
 				errorCount++
 			} else {
 				validResponses = append(validResponses, result.Response)
-				log.Printf("Received valid response: %s", string(result.Response))
+				logger.Debug("Received valid response: %s", string(result.Response))
 			}
 		case <-timeout:
-			log.Printf("Timeout reached. Received %d valid responses, %d errors, %d validators did not respond",
+			logger.Warn("Timeout reached. Received %d valid responses, %d errors, %d validators did not respond",
 				len(validResponses), errorCount, validatorCount-len(validResponses)-errorCount)
 			goto respondToClient
 		}
@@ -254,6 +269,7 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 
 respondToClient:
 	if len(validResponses) == 0 {
+		logger.Error("No valid responses received from validators")
 		http.Error(w, "No valid responses received from validators", http.StatusInternalServerError)
 		return
 	}
@@ -268,4 +284,11 @@ respondToClient:
 		"validator_responses": validResponses,
 	}
 	json.NewEncoder(w).Encode(response)
+}
+
+func main() {
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 }

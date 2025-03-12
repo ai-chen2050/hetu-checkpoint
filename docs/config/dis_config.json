@@ -1,8 +1,9 @@
 {
-    "db_host": "localhost",
-    "db_port": 5432,
-    "db_user": "user",
-    "db_password": "password",
-    "db_name": "dispatcher_db",
-    "validator": "localhost:9090"
+    "DBhost": "localhost",
+    "DBport": 5432,
+    "DBuser": "postgres",
+    "DBpassword": "password",
+    "DBname": "bls_db",
+    "Httpport": 8080,
+    "Tcpport": 9090
 }

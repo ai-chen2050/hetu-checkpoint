@@ -1,8 +1,9 @@
 {
-    "db_host": "localhost",
-    "db_port": 5432,
-    "db_user": "user",
-    "db_password": "password",
-    "db_name": "validator_db",
-    "dispatcher": "localhost:9090"
+    "DBhost": "localhost",
+    "DBport": 5432,
+    "DBuser": "postgres",
+    "DBpassword": "password",
+    "DBname": "validator_db",
+    "dispatcher": "localhost:9090",
+    "port": 0
 }

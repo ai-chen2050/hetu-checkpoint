@@ -22,7 +22,7 @@ Hetu Checkpoint creates secure checkpoints for multiple blocks using a network o
 |Block 1 |Block 2 |  ...   |Block N | => Checkpoint Hash => BLS Signatures
 +--------+--------+--------+--------+                             |
                |                                                  V
-        Hetu Chain Epoch n                                        L1
+        Hetu Chain Epoch N                                        L1
 ```            
 ## System Components
 ### Validator Network

@@ -19,6 +19,16 @@ const (
 	FATAL
 )
 
+// ANSI color codes
+const (
+	colorReset  = "\033[0m"
+	colorRed    = "\033[31m"
+	colorGreen  = "\033[32m"
+	colorYellow = "\033[33m"
+	colorBlue   = "\033[34m"
+	colorPurple = "\033[35m"
+)
+
 var (
 	// Default logger instance
 	defaultLogger *Logger
@@ -29,6 +39,14 @@ var (
 		WARN:  "WARN",
 		ERROR: "ERROR",
 		FATAL: "FATAL",
+	}
+	// Colors for different log levels
+	levelColors = map[LogLevel]string{
+		DEBUG: colorBlue,
+		INFO:  colorGreen,
+		WARN:  colorYellow,
+		ERROR: colorRed,
+		FATAL: colorRed,
 	}
 )
 
@@ -83,7 +101,15 @@ func (l *Logger) log(level LogLevel, format string, args ...interface{}) {
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
 	levelName := levelNames[level]
 	message := fmt.Sprintf(format, args...)
-	l.logger.Printf("[%s] [%s] %s", timestamp, levelName, message)
+
+	// Add color to the level name and message for ERROR and FATAL
+	color := levelColors[level]
+	coloredOutput := fmt.Sprintf("[%s] [%s%s%s] %s%s%s",
+		timestamp,
+		color, levelName, colorReset,
+		color, message, colorReset)
+
+	l.logger.Print(coloredOutput)
 
 	if level == FATAL {
 		os.Exit(1)
