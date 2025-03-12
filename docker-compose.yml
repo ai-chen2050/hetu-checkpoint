@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  dispatcher:
+    build:
+      context: .
+      dockerfile: build/dispatcher/Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config:/app/config
+    command: ["./dispatcher", "--config", "config/dispatcher.yaml"]
+
+  validator:
+    build:
+      context: .
+      dockerfile: build/validator/Dockerfile
+    volumes:
+      - ./config:/app/config
+    command: ["./validator", "--config", "config/validator.yaml"]
+    depends_on:
+      - dispatcher 

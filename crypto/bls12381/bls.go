@@ -2,10 +2,10 @@ package bls12381
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"io"
 
-	cmtcrypto "github.com/cometbft/cometbft/crypto"
 	"github.com/pkg/errors"
 	blst "github.com/supranational/blst/bindings/go"
 )
@@ -25,7 +25,9 @@ func GenPrivKey() PrivateKey {
 }
 
 func GenPrivKeyFromSecret(secret []byte) PrivateKey {
-	seed := cmtcrypto.Sha256(secret)
+	hasher := sha256.New()
+	hasher.Write(secret)
+	seed := hasher.Sum(nil)
 
 	return genPrivKeyFromSeed(seed)
 }
@@ -116,14 +118,14 @@ func VerifyMultiSig(sig Signature, pks []PublicKey, msg []byte) (bool, error) {
 
 // NewBlsPubKeyFromHex creates a new BlsPubKey from a hex string
 func NewBlsPubKeyFromHex(hexStr string) (PublicKey, error) {
-    bytes, err := hex.DecodeString(hexStr)
-    if err != nil {
-        return nil, err
-    }
-    if len(bytes) != 192 {
-        return nil, errors.New("invalid BLS uncompressed public key length")
-    }
-    pk := new(BlsPubKey)
+	bytes, err := hex.DecodeString(hexStr)
+	if err != nil {
+		return nil, err
+	}
+	if len(bytes) != 192 {
+		return nil, errors.New("invalid BLS uncompressed public key length")
+	}
+	pk := new(BlsPubKey)
 	p2a := pk.Deserialize(bytes)
 	if pk == nil {
 		return nil, errors.New("failed to deserialize BLS public key")
