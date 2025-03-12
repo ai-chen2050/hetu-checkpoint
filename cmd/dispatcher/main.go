@@ -14,16 +14,19 @@ import (
 
 	"github.com/hetu-project/hetu-checkpoint/config"
 	"github.com/hetu-project/hetu-checkpoint/logger"
+	"github.com/hetu-project/hetu-checkpoint/store"
 )
 
 var (
 	configFile string
 	logLevel   string
+	enableDB   bool
 	validators struct {
 		sync.RWMutex
 		connections map[net.Conn]bool
 		addresses   map[net.Conn]string
 	}
+	dbClient *store.DBClient
 )
 
 func init() {
@@ -32,6 +35,7 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVar(&configFile, "config", "", "config file (default is ./config.json)")
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "INFO", "log level (DEBUG, INFO, WARN, ERROR, FATAL)")
+	rootCmd.PersistentFlags().BoolVar(&enableDB, "enable-db", false, "enable database persistence")
 }
 
 var rootCmd = &cobra.Command{
@@ -47,6 +51,28 @@ var rootCmd = &cobra.Command{
 		cfg, err := config.LoadDispatcherConfig(configFile)
 		if err != nil {
 			logger.Fatal("Failed to load configuration: %v", err)
+		}
+
+		// Initialize database client only if enabled
+		if enableDB {
+			logger.Info("Database persistence enabled, initializing connection...")
+			dbClient, err = store.NewDBClient(store.Config{
+				Host:     cfg.DBHost,
+				Port:     cfg.DBPort,
+				User:     cfg.DBUser,
+				Password: cfg.DBPassword,
+				DBName:   cfg.DBName,
+			})
+			if err != nil {
+				logger.Fatal("Failed to initialize database client: %v", err)
+			}
+			defer dbClient.Close()
+
+			// Create database tables
+			if err := dbClient.CreateDispatcherTables(); err != nil {
+				logger.Fatal("Failed to create database tables: %v", err)
+			}
+			logger.Info("Database initialized successfully")
 		}
 
 		// Start the server
@@ -161,6 +187,17 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 
 	logger.Info("Received client request: %s", string(body))
 
+	// Store the request in database if enabled
+	var request *store.SignRequest
+	if enableDB {
+		var err error
+		request, err = dbClient.InsertDisSignRequest(string(body))
+		if err != nil {
+			logger.Error("Failed to store sign request: %v", err)
+			// Continue processing even if DB storage fails
+		}
+	}
+
 	// Create separate connections for each validator
 	type ValidatorClient struct {
 		Conn net.Conn
@@ -270,8 +307,25 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 respondToClient:
 	if len(validResponses) == 0 {
 		logger.Error("No valid responses received from validators")
+		if enableDB && request != nil {
+			_ = dbClient.UpdateDisSignRequestStatus(request.ID, "FAILED")
+		}
 		http.Error(w, "No valid responses received from validators", http.StatusInternalServerError)
 		return
+	}
+
+	// Store validator responses if DB is enabled
+	if enableDB && request != nil {
+		for _, response := range validResponses {
+			_, err := dbClient.InsertDisSignResponse(request.ID, "validator-id", string(response))
+			if err != nil {
+				logger.Error("Failed to store validator response: %v", err)
+			}
+		}
+		err := dbClient.UpdateDisSignRequestStatus(request.ID, "COMPLETED")
+		if err != nil {
+			logger.Error("Failed to update request status: %v", err)
+		}
 	}
 
 	// Write summary of responses

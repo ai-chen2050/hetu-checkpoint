@@ -10,18 +10,22 @@ import (
 
 	"github.com/hetu-project/hetu-checkpoint/config"
 	"github.com/hetu-project/hetu-checkpoint/logger"
+	"github.com/hetu-project/hetu-checkpoint/store"
 )
 
 var (
 	configFile string
 	logLevel   string
 	port       int
+	enableDB   bool
+	dbClient   *store.DBClient
 )
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(&configFile, "config", "", "config file (default is ./config.json)")
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "INFO", "log level (DEBUG, INFO, WARN, ERROR, FATAL)")
 	rootCmd.PersistentFlags().IntVar(&port, "port", 0, "port to listen on (0 for random port)")
+	rootCmd.PersistentFlags().BoolVar(&enableDB, "enable-db", false, "enable database persistence")
 }
 
 var rootCmd = &cobra.Command{
@@ -37,6 +41,28 @@ var rootCmd = &cobra.Command{
 		cfg, err := config.LoadValidatorConfig(configFile, port)
 		if err != nil {
 			logger.Fatal("Failed to load configuration: %v", err)
+		}
+
+		// Initialize database client only if enabled
+		if enableDB {
+			logger.Info("Database persistence enabled, initializing connection...")
+			dbClient, err = store.NewDBClient(store.Config{
+				Host:     cfg.DBHost,
+				Port:     cfg.DBPort,
+				User:     cfg.DBUser,
+				Password: cfg.DBPassword,
+				DBName:   cfg.DBName,
+			})
+			if err != nil {
+				logger.Fatal("Failed to initialize database client: %v", err)
+			}
+			defer dbClient.Close()
+
+			// Create database tables
+			if err := dbClient.CreateValidatorTables(); err != nil {
+				logger.Fatal("Failed to create database tables: %v", err)
+			}
+			logger.Info("Database initialized successfully")
 		}
 
 		// Start the server
@@ -127,39 +153,36 @@ func handleHeartbeat(conn net.Conn) {
 	failureCount := 0
 	const maxFailures = 3
 
-	for {
-		select {
-		case <-ticker.C:
-			// Set a deadline for this heartbeat cycle
-			conn.SetDeadline(time.Now().Add(2 * time.Second))
+	for range ticker.C {
+		// Set a deadline for this heartbeat cycle
+		conn.SetDeadline(time.Now().Add(2 * time.Second))
 
-			_, err := conn.Write([]byte("ping"))
-			if err != nil {
-				logger.Error("Failed to send heartbeat: %v", err)
+		_, err := conn.Write([]byte("ping"))
+		if err != nil {
+			logger.Error("Failed to send heartbeat: %v", err)
+			return
+		}
+
+		// Read response
+		buf := make([]byte, 4)
+		n, err := conn.Read(buf)
+		if err != nil {
+			failureCount++
+			logger.Error("Error reading heartbeat response: %v (failure %d/%d)",
+				err, failureCount, maxFailures)
+
+			if failureCount >= maxFailures {
+				logger.Warn("Too many heartbeat failures, reconnecting...")
 				return
 			}
+			continue
+		}
 
-			// Read response
-			buf := make([]byte, 4)
-			n, err := conn.Read(buf)
-			if err != nil {
-				failureCount++
-				logger.Error("Error reading heartbeat response: %v (failure %d/%d)",
-					err, failureCount, maxFailures)
+		// Reset failure counter on successful heartbeat
+		failureCount = 0
 
-				if failureCount >= maxFailures {
-					logger.Warn("Too many heartbeat failures, reconnecting...")
-					return
-				}
-				continue
-			}
-
-			// Reset failure counter on successful heartbeat
-			failureCount = 0
-
-			if string(buf[:n]) != "pong" {
-				logger.Warn("Unexpected heartbeat response: %s", string(buf[:n]))
-			}
+		if string(buf[:n]) != "pong" {
+			logger.Warn("Unexpected heartbeat response: %s", string(buf[:n]))
 		}
 	}
 }
@@ -178,8 +201,17 @@ func handleSigningRequest(conn net.Conn) {
 	request := buf[:n]
 	logger.Info("Received signing request: %s", string(request))
 
-	// simulate signature
+	// Simulate signature
 	signature := fmt.Sprintf("Signed by validator: %s", string(request))
+
+	// Store the response in database if enabled
+	if enableDB {
+		validatorID := conn.LocalAddr().String()
+		_, err = dbClient.InsertValSignResponse(-1, validatorID, signature) // Note: request ID is not available here
+		if err != nil {
+			logger.Error("Failed to store sign response: %v", err)
+		}
+	}
 
 	// Send response
 	_, err = conn.Write([]byte(signature))

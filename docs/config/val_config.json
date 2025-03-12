@@ -2,7 +2,7 @@
     "DBhost": "localhost",
     "DBport": 5432,
     "DBuser": "postgres",
-    "DBpassword": "password",
+    "DBpassword": "hetu",
     "DBname": "validator_db",
     "dispatcher": "localhost:9090",
     "port": 0

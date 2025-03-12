@@ -2,7 +2,7 @@
     "DBhost": "localhost",
     "DBport": 5432,
     "DBuser": "postgres",
-    "DBpassword": "password",
+    "DBpassword": "hetu",
     "DBname": "bls_db",
     "Httpport": 8080,
     "Tcpport": 9090
