@@ -1,6 +1,6 @@
 # Hetu Checkpoint
 
-Hetu Checkpoint is a secure and efficient checkpointing system that leverages Distributed Key Generation (DKG) and BLS signatures to prevent long-range attacks on blockchain networks.
+Hetu Checkpoint is a secure and efficient checkpointing system that leverages Byzantine Consistent Broadcast (BCB) and BLS signatures to prevent long-range attacks on blockchain networks.
 
 ## Overview
 
@@ -9,7 +9,7 @@ Hetu Checkpoint creates secure checkpoints for multiple blocks using a network o
 ## Key Features
 
 - **Epoch-based Checkpointing**: Divides blockchain into epochs with fixed validator sets
-- **DKG Integration**: Secure distributed key generation for validator coordination
+- **BCB Integration**: Secure Byzantine Consistent Broadcast for validator coordination
 - **BLS Signatures**: Efficient aggregated signatures for checkpoint creation
 - **Ethereum Anchoring**: Checkpoint hashes are recorded on Ethereum
 - **Long-range Attack Prevention**: Enhanced security through periodic checkpointing
@@ -19,9 +19,10 @@ Hetu Checkpoint creates secure checkpoints for multiple blocks using a network o
 ### Epoch Structure
 ```ascii:/README.md
 +--------+--------+--------+--------+
-|Block 1 |Block 2 |  ...   |Block N | => Checkpoint Hash
-+--------+--------+--------+--------+
-            Epoch n
+|Block 1 |Block 2 |  ...   |Block N | => Checkpoint Hash => BLS Signatures
++--------+--------+--------+--------+                             |
+               |                                                  V
+        Hetu Chain Epoch n                                        L1
 ```            
 ## System Components
 ### Validator Network
@@ -29,9 +30,9 @@ Hetu Checkpoint creates secure checkpoints for multiple blocks using a network o
 Distributed network of validators
 Consensus on checkpoint generation
 BLS signature aggregation
-### DKG System
+### BCB Algorithm
 
-Secure key generation
+Efficient consistency Broadcast
 Validator coordination
 Threshold signature scheme
 ### Checkpoint Generation
@@ -52,7 +53,7 @@ Consistent validator set within each epoch
 Configurable epoch parameters
 ### Security Features
 - BLS Signatures: Efficient signature aggregation Reduced communication overhead Strong cryptographic security
-- DKG Protocol: Distributed trust model No single point of failure Threshold-based security
+- **BCB Protocol**: Byzantine Consistent Broadcast ensures that all honest validators agree on the same checkpoint data, providing a distributed trust model with no single point of failure and threshold-based security.
 
 
 ## Contributing
