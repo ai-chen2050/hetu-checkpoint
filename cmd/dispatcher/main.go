@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/hetu-project/hetu-checkpoint/config"
+	"github.com/hetu-project/hetu-checkpoint/crypto"
 	"github.com/hetu-project/hetu-checkpoint/logger"
 	"github.com/hetu-project/hetu-checkpoint/store"
 )
@@ -21,6 +23,9 @@ var (
 	configFile string
 	logLevel   string
 	enableDB   bool
+	keyFile    string
+	keyPwd     string	// password
+	keyPair    *crypto.CombinedKeyPair
 	validators struct {
 		sync.RWMutex
 		connections map[net.Conn]bool
@@ -36,6 +41,8 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&configFile, "config", "", "config file (default is ./config.json)")
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "INFO", "log level (DEBUG, INFO, WARN, ERROR, FATAL)")
 	rootCmd.PersistentFlags().BoolVar(&enableDB, "enable-db", false, "enable database persistence")
+	rootCmd.PersistentFlags().StringVar(&keyFile, "keys", "", "path to the key file")
+	rootCmd.PersistentFlags().StringVar(&keyPwd, "key-password", "", "password for the key file")
 }
 
 var rootCmd = &cobra.Command{
@@ -51,6 +58,16 @@ var rootCmd = &cobra.Command{
 		cfg, err := config.LoadDispatcherConfig(configFile)
 		if err != nil {
 			logger.Fatal("Failed to load configuration: %v", err)
+		}
+
+		// Load key pair if specified
+		if keyFile != "" {
+			logger.Info("Loading key pair from %s", keyFile)
+			keyPair, err = crypto.LoadKeyPair(keyFile, keyPwd)
+			if err != nil {
+				logger.Fatal("Failed to load key pair: %v", err)
+			}
+			logger.Info("Loaded key pair with Ethereum address: %s", keyPair.ETH.Address)
 		}
 
 		// Initialize database client only if enabled
@@ -317,7 +334,7 @@ respondToClient:
 	// Store validator responses if DB is enabled
 	if enableDB && request != nil {
 		for _, response := range validResponses {
-			_, err := dbClient.InsertDisSignResponse(request.ID, "validator-id", string(response))
+			_, err := dbClient.InsertDisSignResponse(request.ID, "validator-id", hex.EncodeToString(response))
 			if err != nil {
 				logger.Error("Failed to store validator response: %v", err)
 			}

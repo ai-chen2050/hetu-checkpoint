@@ -8,7 +8,11 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"encoding/hex"
+
 	"github.com/hetu-project/hetu-checkpoint/config"
+	"github.com/hetu-project/hetu-checkpoint/crypto"
+	"github.com/hetu-project/hetu-checkpoint/crypto/bls12381"
 	"github.com/hetu-project/hetu-checkpoint/logger"
 	"github.com/hetu-project/hetu-checkpoint/store"
 )
@@ -19,6 +23,9 @@ var (
 	port       int
 	enableDB   bool
 	dbClient   *store.DBClient
+	keyFile    string
+	keyPwd     string	// password
+	keyPair    *crypto.CombinedKeyPair
 )
 
 func init() {
@@ -26,6 +33,8 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "INFO", "log level (DEBUG, INFO, WARN, ERROR, FATAL)")
 	rootCmd.PersistentFlags().IntVar(&port, "port", 0, "port to listen on (0 for random port)")
 	rootCmd.PersistentFlags().BoolVar(&enableDB, "enable-db", false, "enable database persistence")
+	rootCmd.PersistentFlags().StringVar(&keyFile, "keys", "", "path to the key file")
+	rootCmd.PersistentFlags().StringVar(&keyPwd, "key-password", "", "password for the key file")
 }
 
 var rootCmd = &cobra.Command{
@@ -41,6 +50,18 @@ var rootCmd = &cobra.Command{
 		cfg, err := config.LoadValidatorConfig(configFile, port)
 		if err != nil {
 			logger.Fatal("Failed to load configuration: %v", err)
+		}
+
+		// Load key pair if specified
+		if keyFile != "" {
+			logger.Info("Loading key pair from %s", keyFile)
+			keyPair, err = crypto.LoadKeyPair(keyFile, keyPwd)
+			if err != nil {
+				logger.Fatal("Failed to load key pair: %v", err)
+			}
+			logger.Info("Loaded key pair with Ethereum address: %s", keyPair.ETH.Address)
+		} else {
+			logger.Fatal("Key file must be specified with --keys flag")
 		}
 
 		// Initialize database client only if enabled
@@ -201,26 +222,43 @@ func handleSigningRequest(conn net.Conn) {
 	request := buf[:n]
 	logger.Info("Received signing request: %s", string(request))
 
-	// Simulate signature
-	signature := fmt.Sprintf("Signed by validator: %s", string(request))
+	// Create BLS signature using the loaded key
+	var signature []byte
+	if keyPair != nil {
+		// Convert BLS private key from hex string to bytes
+		blsPrivKeyHex := keyPair.BLS.PrivateKey
+		blsPrivKeyBytes, err := hex.DecodeString(blsPrivKeyHex)
+		if err != nil {
+			logger.Error("Failed to decode BLS private key: %v", err)
+			return
+		}
+
+		// Sign the message using BLS
+		blsSig := bls12381.Sign(blsPrivKeyBytes, request)
+		signature = blsSig
+		logger.Debug("Created BLS signature: %x", signature)
+	} else {
+		logger.Error("No key pair loaded, cannot sign message")
+		return
+	}
 
 	// Store the response in database if enabled
 	if enableDB {
 		validatorID := conn.LocalAddr().String()
-		_, err = dbClient.InsertValSignResponse(-1, validatorID, signature) // Note: request ID is not available here
+		_, err = dbClient.InsertValSignResponse(-1, validatorID, hex.EncodeToString(signature))
 		if err != nil {
 			logger.Error("Failed to store sign response: %v", err)
 		}
 	}
 
 	// Send response
-	_, err = conn.Write([]byte(signature))
+	_, err = conn.Write(signature)
 	if err != nil {
 		logger.Error("Error sending response: %v", err)
 		return
 	}
 
-	logger.Debug("Sent response: %s", signature)
+	logger.Debug("Sent BLS signature: %x", signature)
 }
 
 func main() {
