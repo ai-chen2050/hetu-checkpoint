@@ -24,7 +24,7 @@ var (
 	enableDB   bool
 	dbClient   *store.DBClient
 	keyFile    string
-	keyPwd     string	// password
+	keyPwd     string // password
 	keyPair    *crypto.CombinedKeyPair
 )
 
@@ -41,6 +41,7 @@ var rootCmd = &cobra.Command{
 	Use:   "validator",
 	Short: "Validator service for BLS signing",
 	Long:  `Validator service that performs BLS signing operations.`,
+	Example: `./build/validator --config docs/config/val_config.json --enable-db --keys=keys/validator.json`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Set log level
 		logger.SetLevel(logger.GetLevelFromString(logLevel))
@@ -113,7 +114,7 @@ func startServer(cfg *config.ValidatorConfig) {
 	logger.Info("Validator listening on %s", localAddr)
 
 	// Connect to dispatcher for heartbeat
-	go connectToDispatcher(localAddr, cfg.Dispatcher)
+	go connectToDispatcher(localAddr, cfg.DispatcherTcp)
 
 	// Accept connections for signing requests
 	for {

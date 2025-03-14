@@ -4,6 +4,10 @@
     "DBuser": "postgres",
     "DBpassword": "hetu",
     "DBname": "validator_db",
-    "dispatcher": "localhost:9090",
-    "port": 0
+    "dispatchertcp": "localhost:9090",
+    "port": 0,
+    "ChainRpcURL": "http://localhost:8545",
+    "StakingTokenAddress": "0xbc148ba7b5BBbF46c1637b28887caF8262b3A3B0",
+    "ValidatorStakingAddress": "0xa515Ef471Cd9EEdDCc32A43A1b144EEE4cDAa143",
+    "DispatcherURL": "http://localhost:8080"
 }

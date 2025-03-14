@@ -17,6 +17,7 @@ func init() {
 		Use:   "generate-key",
 		Short: "Generate new Ethereum and BLS key pairs",
 		Long:  `Generate new Ethereum and BLS key pairs and save them to a file.`,
+		Example: `./build/validator generate-key --output=keys/validator.json`,
 		Run:   generateKey,
 	}
 	generateKeyCmd.Flags().StringVar(&keyFilePath, "output", "keys/validator.json", "output file path")

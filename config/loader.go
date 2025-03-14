@@ -88,7 +88,7 @@ func LoadValidatorConfig(configFile string, cmdPort int) (*ValidatorConfig, erro
 	}
 
 	// Validate required fields
-	if config.Dispatcher == "" {
+	if config.DispatcherTcp == "" {
 		return nil, fmt.Errorf("dispatcher address must be specified")
 	}
 
