@@ -24,7 +24,7 @@ var (
 	logLevel   string
 	enableDB   bool
 	keyFile    string
-	keyPwd     string	// password
+	keyPwd     string // password
 	keyPair    *crypto.CombinedKeyPair
 	validators struct {
 		sync.RWMutex
@@ -90,6 +90,17 @@ var rootCmd = &cobra.Command{
 				logger.Fatal("Failed to create database tables: %v", err)
 			}
 			logger.Info("Database initialized successfully")
+		}
+
+		// Initialize gRPC client if endpoint is configured
+		if cfg.GRPCEndpoint != "" {
+			logger.Info("Initializing gRPC client connection to %s", cfg.GRPCEndpoint)
+			if err := InitGRPCClient(cfg.GRPCEndpoint); err != nil {
+				logger.Warn("Failed to initialize gRPC client: %v", err)
+			} else {
+				// Ensure connection is closed when program exits
+				defer CloseGRPCClient()
+			}
 		}
 
 		// Start the server

@@ -5,5 +5,6 @@
     "DBpassword": "hetu",
     "DBname": "bls_db",
     "Httpport": 8080,
-    "Tcpport": 9090
+    "Tcpport": 9090,
+    "GRPCEndpoint": "localhost:9000"
 }
