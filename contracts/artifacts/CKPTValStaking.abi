@@ -299,6 +299,11 @@
           "internalType": "bool",
           "name": "isActive",
           "type": "bool"
+        },
+        {
+          "internalType": "uint256",
+          "name": "index",
+          "type": "uint256"
         }
       ],
       "stateMutability": "view",
@@ -579,6 +584,11 @@
           "internalType": "bool",
           "name": "isActive",
           "type": "bool"
+        },
+        {
+          "internalType": "uint256",
+          "name": "index",
+          "type": "uint256"
         }
       ],
       "stateMutability": "view",
