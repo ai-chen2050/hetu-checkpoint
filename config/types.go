@@ -25,4 +25,6 @@ type ValidatorConfig struct {
 	StakingTokenAddress     string `json:"staking_token_address"`
 	ValidatorStakingAddress string `json:"validator_staking_address"`
 	DispatcherURL           string `json:"dispatcher_url"`
+	ChainGRpcURL            string `json:"chain_grpc_url"`
+	ChainID                 string `json:"chain_id"`
 }

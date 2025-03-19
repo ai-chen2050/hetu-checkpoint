@@ -155,3 +155,10 @@ func (sk PrivateKey) PubKey() PublicKey {
 	pk := new(BlsPubKey).From(secretKey)
 	return pk.Compress()
 }
+
+func (sk PrivateKey) PubKeyUncompress() PublicKey {
+	secretKey := new(blst.SecretKey)
+	secretKey.Deserialize(sk)
+	pk := new(BlsPubKey).From(secretKey)
+	return pk.Serialize()
+}
