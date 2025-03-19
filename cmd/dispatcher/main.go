@@ -43,69 +43,85 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&enableDB, "enable-db", false, "enable database persistence")
 	rootCmd.PersistentFlags().StringVar(&keyFile, "keys", "", "path to the key file")
 	rootCmd.PersistentFlags().StringVar(&keyPwd, "key-password", "", "password for the key file")
+
+	// Create run command
+	runCmd := &cobra.Command{
+		Use:   "run",
+		Short: "Run the dispatcher service",
+		Long:  `Run the dispatcher service that coordinates validators for BLS signing operations.`,
+		Run:   runDispatcher,
+	}
+
+	// Add run command to root
+	rootCmd.AddCommand(runCmd)
 }
 
 var rootCmd = &cobra.Command{
 	Use:   "dispatcher",
 	Short: "Dispatcher service for BLS signing",
 	Long:  `Dispatcher service that coordinates validators for BLS signing operations.`,
+	// Default behavior is to show help
 	Run: func(cmd *cobra.Command, args []string) {
-		// Set log level
-		logger.SetLevel(logger.GetLevelFromString(logLevel))
-		logger.Info("Setting log level to %s", logLevel)
-
-		// Load configuration
-		cfg, err := config.LoadDispatcherConfig(configFile)
-		if err != nil {
-			logger.Fatal("Failed to load configuration: %v", err)
-		}
-
-		// Load key pair if specified
-		if keyFile != "" {
-			logger.Info("Loading key pair from %s", keyFile)
-			keyPair, err = crypto.LoadKeyPair(keyFile, keyPwd)
-			if err != nil {
-				logger.Fatal("Failed to load key pair: %v", err)
-			}
-			logger.Info("Loaded key pair with Ethereum address: %s", keyPair.ETH.Address)
-		}
-
-		// Initialize database client only if enabled
-		if enableDB {
-			logger.Info("Database persistence enabled, initializing connection...")
-			dbClient, err = store.NewDBClient(store.Config{
-				Host:     cfg.DBHost,
-				Port:     cfg.DBPort,
-				User:     cfg.DBUser,
-				Password: cfg.DBPassword,
-				DBName:   cfg.DBName,
-			})
-			if err != nil {
-				logger.Fatal("Failed to initialize database client: %v", err)
-			}
-			defer dbClient.Close()
-
-			// Create database tables
-			if err := dbClient.CreateDispatcherTables(); err != nil {
-				logger.Fatal("Failed to create database tables: %v", err)
-			}
-			logger.Info("Database initialized successfully")
-		}
-
-		// Initialize gRPC client if endpoint is configured
-		if cfg.GRPCEndpoint != "" {
-			logger.Info("Initializing gRPC client connection to %s", cfg.GRPCEndpoint)
-			if err := InitGRPCClient(cfg.GRPCEndpoint); err != nil {
-				logger.Warn("Failed to initialize gRPC client: %v", err)
-			} else {
-				// Ensure connection is closed when program exits
-				defer CloseGRPCClient()
-			}
-		}
-
-		// Start the server
-		startServer(cfg)
+		cmd.Help()
 	},
+}
+
+func runDispatcher(cmd *cobra.Command, args []string) {
+	// Set log level
+	logger.SetLevel(logger.GetLevelFromString(logLevel))
+	logger.Info("Setting log level to %s", logLevel)
+
+	// Load configuration
+	cfg, err := config.LoadDispatcherConfig(configFile)
+	if err != nil {
+		logger.Fatal("Failed to load configuration: %v", err)
+	}
+
+	// Load key pair if specified
+	if keyFile != "" {
+		logger.Info("Loading key pair from %s", keyFile)
+		keyPair, err = crypto.LoadKeyPair(keyFile, keyPwd)
+		if err != nil {
+			logger.Fatal("Failed to load key pair: %v", err)
+		}
+		logger.Info("Loaded key pair with Ethereum address: %s", keyPair.ETH.Address)
+	}
+
+	// Initialize database client only if enabled
+	if enableDB {
+		logger.Info("Database persistence enabled, initializing connection...")
+		dbClient, err = store.NewDBClient(store.Config{
+			Host:     cfg.DBHost,
+			Port:     cfg.DBPort,
+			User:     cfg.DBUser,
+			Password: cfg.DBPassword,
+			DBName:   cfg.DBName,
+		})
+		if err != nil {
+			logger.Fatal("Failed to initialize database client: %v", err)
+		}
+		defer dbClient.Close()
+
+		// Create database tables
+		if err := dbClient.CreateDispatcherTables(); err != nil {
+			logger.Fatal("Failed to create database tables: %v", err)
+		}
+		logger.Info("Database initialized successfully")
+	}
+
+	// Initialize gRPC client if endpoint is configured
+	if cfg.GRPCEndpoint != "" {
+		logger.Info("Initializing gRPC client connection to %s", cfg.GRPCEndpoint)
+		if err := InitGRPCClient(cfg.GRPCEndpoint); err != nil {
+			logger.Warn("Failed to initialize gRPC client: %v", err)
+		} else {
+			// Ensure connection is closed when program exits
+			defer CloseGRPCClient()
+		}
+	}
+
+	// Start the server
+	startServer(cfg)
 }
 
 func startServer(cfg *config.DispatcherConfig) {

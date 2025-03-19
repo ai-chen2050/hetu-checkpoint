@@ -32,7 +32,7 @@ func GenerateKeyPair() (*CombinedKeyPair, error) {
 
 	// Generate BLS key pair
 	blsPrivKey, blsPubKey := bls12381.GenKeyPair()
-
+	blsPubKey = blsPrivKey.PubKeyUncompress()
 	blsKeyPair := &BLSKeyPair{
 		PrivateKey: fmt.Sprintf("%x", blsPrivKey),
 		PublicKey:  fmt.Sprintf("%x", blsPubKey),
