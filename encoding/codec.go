@@ -24,4 +24,8 @@ func RegisterInterfaces(registry codectypes.InterfaceRegistry) {
 		&types.ExtensionOptionsWeb3Tx{},
 		&types.ExtensionOptionDynamicFeeTx{},
 	)
+	// regist checkpointing interfaces
+	registry.RegisterImplementations((*sdk.Msg)(nil),
+		&types.MsgRegistValidator{},
+	)
 }

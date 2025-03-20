@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/cosmos/cosmos-sdk/client"
+	"github.com/cosmos/cosmos-sdk/client/flags"
 	"github.com/cosmos/cosmos-sdk/client/tx"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
@@ -16,6 +17,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"github.com/hetu-project/hetu-checkpoint/config"
 	"github.com/hetu-project/hetu-checkpoint/crypto"
 	"github.com/hetu-project/hetu-checkpoint/crypto/bls12381"
 	"github.com/hetu-project/hetu-checkpoint/crypto/ethsecp256k1"
@@ -29,6 +31,7 @@ import (
 
 var (
 	chainGRpcURL      string
+	cometBFTSvr       string
 	chainID           string
 	cosmosGasLimit    uint64
 	cosmosGasPrice    string
@@ -38,20 +41,6 @@ var (
 	// Global Cosmos client
 	cosmosConn   *grpc.ClientConn
 	cosmosMsgSvc types.MsgClient
-)
-
-const (
-	// Bech32Prefix defines the Bech32 prefix used for EthAccounts
-	Bech32Prefix = "hetu"
-
-	// keyName is the name of the key in the keyring
-	keyName = "validator"
-
-	// Bech32PrefixAccAddr defines the Bech32 prefix of an account's address
-	Bech32PrefixAccAddr = Bech32Prefix
-
-	// Bech32PrefixAccPub defines the Bech32 prefix of an account's public key
-	Bech32PrefixAccPub = Bech32Prefix + sdk.PrefixPublic
 )
 
 func init() {
@@ -65,9 +54,10 @@ func init() {
 	}
 
 	registerValidatorCmd.Flags().StringVar(&chainGRpcURL, "cosmos-rpc", "localhost:9090", "Cosmos gRPC endpoint")
+	registerValidatorCmd.Flags().StringVar(&cometBFTSvr, "comet-bft-svr", "localhost:26657", "Comet BFT gRPC endpoint")
 	registerValidatorCmd.Flags().StringVar(&chainID, "chain-id", "hetu_560002-1", "Cosmos chain ID")
-	registerValidatorCmd.Flags().Uint64Var(&cosmosGasLimit, "gas", 200000, "Gas limit for the transaction")
-	registerValidatorCmd.Flags().StringVar(&cosmosGasPrice, "gas-price", "0.025uhetu", "Gas price for the transaction")
+	registerValidatorCmd.Flags().Uint64Var(&cosmosGasLimit, "gas", 2000000, "Gas limit for the transaction")
+	registerValidatorCmd.Flags().StringVar(&cosmosGasPrice, "gas-price", "10gas", "Gas price for the transaction")
 	registerValidatorCmd.Flags().StringVar(&cosmosMemo, "memo", "", "Memo for the transaction")
 	registerValidatorCmd.Flags().IntVar(&cosmosTimeoutSecs, "timeout", 30, "Timeout in seconds for the transaction")
 
@@ -117,8 +107,8 @@ func ethPrivKeyFromHex(ethPrivKeyHex string) (cryptotypes.PrivKey, error) {
 
 // Get Hetu address from private key
 func getHetuAddressFromPrivKey(privKey cryptotypes.PrivKey) string {
-	config := sdk.GetConfig()
-	config.SetBech32PrefixForAccount(Bech32PrefixAccAddr, Bech32PrefixAccPub)
+	sdkConfig := sdk.GetConfig()
+	sdkConfig.SetBech32PrefixForAccount(config.Bech32PrefixAccAddr, config.Bech32PrefixAccPub)
 	return sdk.AccAddress(privKey.PubKey().Address()).String()
 }
 
@@ -141,6 +131,9 @@ func registerValidator(cmd *cobra.Command, args []string) {
 		if chainID == "" {
 			chainID = v.GetString("cosmos_chain_id")
 		}
+		if cometBFTSvr == "" {
+			cometBFTSvr = v.GetString("comet_bft_svr")
+		}
 	}
 
 	// Validate required parameters
@@ -149,6 +142,9 @@ func registerValidator(cmd *cobra.Command, args []string) {
 	}
 	if chainID == "" {
 		logger.Fatal("Cosmos chain ID is required. Use --chain-id flag or set in config file.")
+	}
+	if cometBFTSvr == "" {
+		logger.Fatal("Comet BFT gRPC endpoint is required. Use --comet-bft-svr flag or set in config file.")
 	}
 	if keyFile == "" {
 		logger.Fatal("Key file must be specified with --keys flag")
@@ -201,21 +197,29 @@ func registerValidator(cmd *cobra.Command, args []string) {
 		logger.Fatal("Failed to create keyring: %v", err)
 	}
 
-	// Create client context with keyring
-	clientCtx := client.Context{
-		ChainID:          chainID,
-		GRPCClient:       cosmosConn,
-		TxConfig:         cfg.TxConfig,
-		Codec:            cfg.Codec,
-		InterfaceRegistry: cfg.InterfaceRegistry,
-		AccountRetriever: authtypes.AccountRetriever{},
-		FromAddress:      sdk.MustAccAddressFromBech32(hetuAddress),
-		Keyring:          kb,
-		KeyringOptions:   []keyring.Option{hdw.EthSecp256k1Option()},
-		FromName:         keyName,
+	rpcClient, err := client.NewClientFromNode("tcp://" + cometBFTSvr)
+	if err != nil {
+		logger.Fatal("Failed to create RPC client: %v", err)
 	}
 
-	err = clientCtx.Keyring.ImportPrivKeyHex(keyName, keyPair.ETH.PrivateKey, "eth_secp256k1")
+	// Create client context with keyring
+	clientCtx := client.Context{
+		ChainID:           chainID,
+		GRPCClient:        cosmosConn,
+		Client:            rpcClient,
+		TxConfig:          cfg.TxConfig,
+		Codec:             cfg.Codec,
+		InterfaceRegistry: cfg.InterfaceRegistry,
+		AccountRetriever:  authtypes.AccountRetriever{},
+		FromAddress:       sdk.MustAccAddressFromBech32(hetuAddress),
+		Keyring:           kb,
+		KeyringOptions:    []keyring.Option{hdw.EthSecp256k1Option()},
+		FromName:          config.KeyName,
+		SkipConfirm:       true,
+		BroadcastMode:     flags.BroadcastSync,
+	}
+
+	err = clientCtx.Keyring.ImportPrivKeyHex(config.KeyName, keyPair.ETH.PrivateKey, "eth_secp256k1")
 	if err != nil {
 		logger.Fatal("Failed to import private key: %v", err)
 	}
@@ -250,7 +254,7 @@ func registerValidator(cmd *cobra.Command, args []string) {
 		WithChainID(chainID).
 		WithGas(cosmosGasLimit).
 		WithGasAdjustment(gasAdjustment).
-		WithFees(fees.String()).
+		WithGasPrices(fees.String()).
 		WithMemo(cosmosMemo).
 		WithSignMode(signing.SignMode_SIGN_MODE_DIRECT).
 		WithTxConfig(clientCtx.TxConfig).
@@ -265,7 +269,4 @@ func registerValidator(cmd *cobra.Command, args []string) {
 	}
 
 	logger.Info("Transaction broadcast successful!")
-	// logger.Info("Transaction hash: %s", resp.TxHash)
-	// logger.Info("Gas used: %d", resp.GasUsed)
-	// logger.Info("Height: %d", resp.Height)
 }
