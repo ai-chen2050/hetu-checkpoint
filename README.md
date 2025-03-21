@@ -58,11 +58,22 @@ make build-validator
 ### Running the System
 1. Start the dispatcher first:
 ```bash
-./build/dispatcher --config docs/config/dis_config.yaml
+# generate key
+./build/dispatcher generate-key --output=keys/dispatcher.json
+
+# run a node
+./build/dispatcher run --config docs/config/dis_config.yaml --keys=keys/dispatcher.json --log-level=info
 ```
 
 2. Start the validator(s):
 ```bash
+# generate key
+./build/validator generate-key --output=keys/validator.json
+
+# regist and stake
+./build/validator register-and-stake  --config docs/config/val_config.json  --keys keys/validator.json  --amount 500
+
+# run a node
 ./build/validator --config docs/config/val_config.yaml
 ```
 
