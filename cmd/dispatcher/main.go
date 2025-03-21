@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -28,8 +29,9 @@ var (
 	keyPair    *crypto.CombinedKeyPair
 	validators struct {
 		sync.RWMutex
-		connections map[net.Conn]bool
-		addresses   map[net.Conn]string
+		connections  map[net.Conn]bool
+		addresses    map[net.Conn]string
+		ethAddresses map[net.Conn]string
 	}
 	dbClient *store.DBClient
 )
@@ -37,6 +39,7 @@ var (
 func init() {
 	validators.connections = make(map[net.Conn]bool)
 	validators.addresses = make(map[net.Conn]string)
+	validators.ethAddresses = make(map[net.Conn]string)
 
 	rootCmd.PersistentFlags().StringVar(&configFile, "config", "", "config file (default is ./config.json)")
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "INFO", "log level (DEBUG, INFO, WARN, ERROR, FATAL)")
@@ -154,35 +157,46 @@ func startServer(cfg *config.DispatcherConfig) {
 }
 
 func handleValidatorConnection(conn net.Conn) {
-	// Wait for the validator to send its listening address
 	buffer := make([]byte, 1024)
+
+	// Read validator address information
 	n, err := conn.Read(buffer)
 	if err != nil {
-		logger.Error("Error reading validator address: %v", err)
+		logger.Error("Failed to read validator address: %v", err)
 		conn.Close()
 		return
 	}
 
-	data := string(buffer[:n])
-	var validatorAddr string
-
-	// Parse the ADDR: message
-	if len(data) > 5 && data[:5] == "ADDR:" {
-		validatorAddr = data[5:]
-		logger.Info("Validator registered with address: %s", validatorAddr)
-	} else {
-		logger.Error("Invalid address format from validator: %s", data)
+	// Parse address information, format is "listen_addr|eth_addr"
+	addrInfo := string(buffer[:n])
+	parts := strings.Split(addrInfo, "|")
+	if len(parts) != 2 {
+		logger.Error("Invalid validator address format: %s", addrInfo)
 		conn.Close()
 		return
 	}
 
+	validatorAddr := parts[0]
+	validatorEthAddr := parts[1]
+
+	// Store connection and address information
 	validators.Lock()
+	if validators.connections == nil {
+		validators.connections = make(map[net.Conn]bool)
+	}
 	validators.connections[conn] = true
-	// Store the validator's listening address
+
+	// Store validator's listening address
 	if validators.addresses == nil {
 		validators.addresses = make(map[net.Conn]string)
 	}
 	validators.addresses[conn] = validatorAddr
+
+	// Store validator's ETH address
+	if validators.ethAddresses == nil {
+		validators.ethAddresses = make(map[net.Conn]string)
+	}
+	validators.ethAddresses[conn] = validatorEthAddr
 	validators.Unlock()
 
 	logger.Info("New validator connected. Total validators: %d", len(validators.connections))
@@ -195,6 +209,7 @@ func handleValidatorConnection(conn net.Conn) {
 			validators.Lock()
 			delete(validators.connections, conn)
 			delete(validators.addresses, conn)
+			delete(validators.ethAddresses, conn)
 			conn.Close()
 			validators.Unlock()
 			logger.Info("Validator removed. Remaining validators: %d", len(validators.connections))
@@ -214,6 +229,7 @@ func handleValidatorConnection(conn net.Conn) {
 				validators.Lock()
 				delete(validators.connections, conn)
 				delete(validators.addresses, conn)
+				delete(validators.ethAddresses, conn)
 				conn.Close()
 				validators.Unlock()
 				return
@@ -327,7 +343,7 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 
 	// Collect responses with timeout
 	timeout := time.After(1 * time.Second)
-	validResponses := make([][]byte, 0, validatorCount)
+	validResponses := make(map[string][]byte)
 	errorCount := 0
 
 	// Wait for all responses or timeout
@@ -338,7 +354,10 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 				logger.Error("Validator error: %v", result.Error)
 				errorCount++
 			} else {
-				validResponses = append(validResponses, result.Response)
+				validators.RLock()
+				ethAddr := validators.ethAddresses[validatorClients[i].Conn]
+				validators.RUnlock()
+				validResponses[ethAddr] = result.Response
 				logger.Debug("Received valid response: %s", string(result.Response))
 			}
 		case <-timeout:
@@ -360,8 +379,8 @@ respondToClient:
 
 	// Store validator responses if DB is enabled
 	if enableDB && request != nil {
-		for _, response := range validResponses {
-			_, err := dbClient.InsertDisSignResponse(request.ID, "validator-id", hex.EncodeToString(response))
+		for ethAddr, response := range validResponses {
+			_, err := dbClient.InsertDisSignResponse(request.ID, ethAddr, hex.EncodeToString(response))
 			if err != nil {
 				logger.Error("Failed to store validator response: %v", err)
 			}

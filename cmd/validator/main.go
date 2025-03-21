@@ -156,8 +156,19 @@ func connectToDispatcher(localAddr string, dispatcher string) {
 
 		logger.Info("Connected to dispatcher at %s", dispatcher)
 
+		// Ensure keyPair is loaded
+		if keyPair == nil {
+			logger.Error("Key pair not loaded")
+			conn.Close()
+			time.Sleep(5 * time.Second)
+			continue
+		}
+
+		// Send address information including local address and ETH address
+		addrInfo := fmt.Sprintf("%s|%s", localAddr, keyPair.ETH.Address)
+
 		// Send local address as first message
-		_, err = conn.Write([]byte("ADDR:" + localAddr))
+		_, err = conn.Write([]byte(addrInfo))
 		if err != nil {
 			logger.Error("Failed to send local address: %v", err)
 			conn.Close()
