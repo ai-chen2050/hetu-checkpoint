@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
+	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/hetu-project/hetu-checkpoint/config"
 	"github.com/hetu-project/hetu-checkpoint/crypto/bls12381"
 	"github.com/hetu-project/hetu-checkpoint/crypto/eth"
 )
@@ -14,6 +16,8 @@ import (
 type CombinedKeyPair struct {
 	ETH *eth.KeyPair `json:"eth"`
 	BLS *BLSKeyPair  `json:"bls"`
+	// Add Hetu address field
+	HetuAddress string `json:"hetu_address,omitempty"`
 }
 
 // BLSKeyPair represents a BLS key pair
@@ -38,9 +42,15 @@ func GenerateKeyPair() (*CombinedKeyPair, error) {
 		PublicKey:  fmt.Sprintf("%x", blsPubKey),
 	}
 
+	// Calculate Hetu address
+	sdkConfig := sdk.GetConfig()
+	sdkConfig.SetBech32PrefixForAccount(config.Bech32PrefixAccAddr, config.Bech32PrefixAccPub)
+	hetuAddress := sdk.AccAddress(ethKeyPair.PublicKey).String()
+
 	return &CombinedKeyPair{
-		ETH: ethKeyPair,
-		BLS: blsKeyPair,
+		ETH:         ethKeyPair,
+		BLS:         blsKeyPair,
+		HetuAddress: hetuAddress,
 	}, nil
 }
 
@@ -100,7 +110,7 @@ func SaveKeyPair(keyPair *CombinedKeyPair, filePath string, password string) err
 
 	// Add BLS key information to the keystore file
 	keystoreJSON["bls"] = keyPair.BLS
-
+	keystoreJSON["hetu_address"] = keyPair.HetuAddress
 	// Write the updated keystore file
 	updatedData, err := json.MarshalIndent(keystoreJSON, "", "  ")
 	if err != nil {
@@ -151,6 +161,15 @@ func LoadKeyPair(filePath string, password string) (*CombinedKeyPair, error) {
 		return nil, fmt.Errorf("failed to load Ethereum key pair: %v", err)
 	}
 
+	// Check if it has Hetu address information
+	hetuAddress, hasHetu := keystoreJSON["hetu_address"]
+	if !hasHetu {
+		// Calculate Hetu address
+		sdkConfig := sdk.GetConfig()
+		sdkConfig.SetBech32PrefixForAccount(config.Bech32PrefixAccAddr, config.Bech32PrefixAccPub)
+		hetuAddress = sdk.AccAddress(ethKeyPair.PublicKey).String()
+	}
+
 	// Extract BLS key pair
 	blsJSON, err := json.Marshal(blsData)
 	if err != nil {
@@ -165,14 +184,15 @@ func LoadKeyPair(filePath string, password string) (*CombinedKeyPair, error) {
 	return &CombinedKeyPair{
 		ETH: ethKeyPair,
 		BLS: &blsKeyPair,
+		HetuAddress: hetuAddress.(string),
 	}, nil
 }
 
 // ExportPrivateKeys exports both Ethereum and BLS private keys
-func ExportPrivateKeys(filePath string, password string) (string, string, error) {
+func ExportPrivateKeys(filePath string, password string) (string, string, string, error) {
 	keyPair, err := LoadKeyPair(filePath, password)
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
-	return keyPair.ETH.PrivateKey, keyPair.BLS.PrivateKey, nil
+	return keyPair.ETH.PrivateKey, keyPair.BLS.PrivateKey, keyPair.HetuAddress, nil
 }

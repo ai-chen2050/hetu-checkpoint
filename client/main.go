@@ -2,15 +2,32 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+
+	"github.com/hetu-project/hetu-checkpoint/config"
+	"github.com/hetu-project/hetu-checkpoint/proto/types"
 )
 
 func main() {
 	url := "http://localhost:8080/reqblssign"
-	message := []byte(`{"data": "test message"}`)
+	request := config.Request{
+		ValidatorAddress: "hetu1...",
+		Checkpoint: types.RawCheckpoint{
+			EpochNum:    100,
+			BlockHash:   &types.BlockHash{}, // Initialize with appropriate hash
+			Bitmap:      []byte("0x1234567890abcdef..."),
+			BlsMultiSig: nil,
+		},
+	}
+
+	message, err := json.Marshal(request)
+	if err != nil {
+		log.Fatalf("Error marshaling request: %v", err)
+	}
 
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(message))
 	if err != nil {

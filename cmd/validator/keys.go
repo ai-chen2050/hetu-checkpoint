@@ -73,7 +73,7 @@ func exportKey(cmd *cobra.Command, args []string) {
 	logger.SetLevel(logger.GetLevelFromString(logLevel))
 
 	// Export private keys
-	ethPrivKey, blsPrivKey, err := crypto.ExportPrivateKeys(keyFilePath, keyPassword)
+	ethPrivKey, blsPrivKey, hetuAddress, err := crypto.ExportPrivateKeys(keyFilePath, keyPassword)
 	if err != nil {
 		logger.Fatal("Failed to export private keys: %v", err)
 	}
@@ -81,4 +81,5 @@ func exportKey(cmd *cobra.Command, args []string) {
 	logger.Info("Exported private keys:")
 	logger.Info("Ethereum Private Key: %s", ethPrivKey)
 	logger.Info("BLS Private Key: %s", blsPrivKey)
+	logger.Info("Hetu Address: %s", hetuAddress)
 }

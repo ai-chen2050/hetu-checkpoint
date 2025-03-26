@@ -123,6 +123,19 @@ func runDispatcher(cmd *cobra.Command, args []string) {
 		}
 	}
 
+	// Log reporting status
+	if cfg.EnableReport {
+		logger.Info("BLS signature reporting is enabled")
+		if cfg.ChainGRpcURL == "" {
+			logger.Warn("Chain gRPC URL is not set, reporting will fail")
+		}
+		if cfg.ChainID == "" {
+			logger.Warn("Chain ID is not set, reporting will fail")
+		}
+	} else {
+		logger.Info("BLS signature reporting is disabled")
+	}
+
 	// Start the server
 	startServer(cfg)
 }
@@ -131,7 +144,9 @@ func startServer(cfg *config.DispatcherConfig) {
 	httpPort := fmt.Sprintf(":%d", cfg.HTTPPort)
 	tcpPort := fmt.Sprintf(":%d", cfg.TCPPort)
 
-	http.HandleFunc("/reqblssign", handleRequest)
+	http.HandleFunc("/reqblssign", func(w http.ResponseWriter, r *http.Request) {
+		handleRequest(w, r, cfg)
+	})
 	go func() {
 		logger.Info("Starting HTTP server on port %d", cfg.HTTPPort)
 		if err := http.ListenAndServe(httpPort, nil); err != nil {
@@ -167,8 +182,17 @@ func handleValidatorConnection(conn net.Conn) {
 		return
 	}
 
-	// Parse address information, format is "listen_addr|eth_addr"
 	addrInfo := string(buffer[:n])
+	logger.Info("Received validator address: %s", addrInfo)
+
+	// Skip HTTP/2 protocol messages
+	if strings.HasPrefix(addrInfo, "PRI * HTTP/2.0") {
+		logger.Warn("Received HTTP/2 protocol message instead of validator address, closing connection")
+		conn.Close()
+		return
+	}
+
+	// Parse address information, format is "listen_addr|eth_addr"
 	parts := strings.Split(addrInfo, "|")
 	if len(parts) != 2 {
 		logger.Error("Invalid validator address format: %s", addrInfo)
@@ -217,6 +241,13 @@ func handleValidatorConnection(conn net.Conn) {
 		}
 
 		data := string(buffer[:n])
+
+		// Skip HTTP/2 protocol messages
+		if strings.HasPrefix(data, "PRI * HTTP/2.0") {
+			logger.Warn("Received HTTP/2 protocol message, ignoring")
+			continue
+		}
+
 		if data != "ping" {
 			logger.Debug("Received data from validator: %s", data)
 		}
@@ -238,14 +269,24 @@ func handleValidatorConnection(conn net.Conn) {
 	}
 }
 
-func handleRequest(w http.ResponseWriter, r *http.Request) {
+func handleRequest(w http.ResponseWriter, r *http.Request, cfg *config.DispatcherConfig) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
 
+	// Parse the request to get checkpoint data
+	var req config.Request
+	if err := json.Unmarshal(body, &req); err != nil {
+		logger.Error("Failed to parse request message: %v", err)
+		return
+	}
+
 	logger.Info("Received client request: %s", string(body))
+
+	// Generate message to be signed
+	msgToBeSigned := config.GetSignBytes(req.Checkpoint.EpochNum-1, *req.Checkpoint.BlockHash)
 
 	// Store the request in database if enabled
 	var request *store.SignRequest
@@ -258,20 +299,14 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Create separate connections for each validator
-	type ValidatorClient struct {
-		Conn net.Conn
-		Addr string
-	}
-
-	var validatorClients []ValidatorClient
+	var validatorClients []config.ValidatorClient
 
 	// Get validator addresses
 	validators.RLock()
 	for conn := range validators.connections {
 		addr := validators.addresses[conn]
 		if addr != "" {
-			validatorClients = append(validatorClients, ValidatorClient{
+			validatorClients = append(validatorClients, config.ValidatorClient{
 				Conn: conn,
 				Addr: addr,
 			})
@@ -287,11 +322,7 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create channels for collecting responses
-	type ValidatorResponse struct {
-		Response []byte
-		Error    error
-	}
-	results := make(chan ValidatorResponse, validatorCount)
+	results := make(chan config.ValidatorResponse, validatorCount)
 
 	// Create new connections for each request
 	for _, vc := range validatorClients {
@@ -299,7 +330,7 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 			// Create a new connection for this request
 			reqConn, err := net.Dial("tcp", addr)
 			if err != nil {
-				results <- ValidatorResponse{Error: fmt.Errorf("connection error: %v", err)}
+				results <- config.ValidatorResponse{Error: fmt.Errorf("connection error: %v", err)}
 				return
 			}
 			defer reqConn.Close()
@@ -308,9 +339,9 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 			reqConn.SetDeadline(time.Now().Add(900 * time.Millisecond))
 
 			// Send request
-			_, err = reqConn.Write(body)
+			_, err = reqConn.Write(msgToBeSigned)
 			if err != nil {
-				results <- ValidatorResponse{Error: fmt.Errorf("write error: %v", err)}
+				results <- config.ValidatorResponse{Error: fmt.Errorf("write error: %v", err)}
 				return
 			}
 
@@ -322,9 +353,9 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 				n, err := reqConn.Read(buffer)
 				if err != nil {
 					if len(responseData) == 0 {
-						results <- ValidatorResponse{Error: fmt.Errorf("read error: %v", err)}
+						results <- config.ValidatorResponse{Error: fmt.Errorf("read error: %v", err)}
 					} else {
-						results <- ValidatorResponse{Response: responseData}
+						results <- config.ValidatorResponse{Response: responseData}
 					}
 					return
 				}
@@ -337,7 +368,7 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 			}
 
 			logger.Debug("Received response from validator: %s", string(responseData))
-			results <- ValidatorResponse{Response: responseData}
+			results <- config.ValidatorResponse{Response: responseData}
 		}(vc.Addr)
 	}
 
@@ -391,14 +422,25 @@ respondToClient:
 		}
 	}
 
+	// Report BLS signatures if enabled, firstly
+	if cfg.EnableReport {
+		go ReportBLSSignatures(validResponses, &req, cfg)
+	}
+
+	// Convert binary responses to map for JSON response
+	jsonResponses := make(map[string]string)
+	for ethAddr, response := range validResponses {
+		jsonResponses[ethAddr] = hex.EncodeToString(response)
+	}
+
 	// Write summary of responses
 	w.Header().Set("Content-Type", "application/json")
-	response := map[string]interface{}{
-		"total_validators":    validatorCount,
-		"responses_received":  len(validResponses),
-		"errors":              errorCount,
-		"no_response":         validatorCount - len(validResponses) - errorCount,
-		"validator_responses": validResponses,
+	response := config.Response{
+		TotalValidators:    validatorCount,
+		ResponsesReceived:  len(validResponses),
+		Errors:             errorCount,
+		NoResponse:         validatorCount - len(validResponses) - errorCount,
+		ValidatorResponses: jsonResponses,
 	}
 	json.NewEncoder(w).Encode(response)
 }

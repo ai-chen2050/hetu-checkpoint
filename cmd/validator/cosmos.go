@@ -49,11 +49,11 @@ func init() {
 		Use:     "register-validator",
 		Short:   "Register validator on Cosmos chain",
 		Long:    `Register validator on Cosmos chain by submitting a transaction to the RegistValidator RPC endpoint.`,
-		Example: `./build/validator register-validator --cosmos-rpc=localhost:9090 --chain-id=hetu_7878-1`,
+		Example: `./build/validator register-validator --chain-grpc-url=localhost:9090 --chain-id=hetu_7878-1`,
 		Run:     registerValidator,
 	}
 
-	registerValidatorCmd.Flags().StringVar(&chainGRpcURL, "cosmos-rpc", "localhost:9090", "Cosmos gRPC endpoint")
+	registerValidatorCmd.Flags().StringVar(&chainGRpcURL, "chain-grpc-url", "localhost:9090", "Cosmos gRPC endpoint")
 	registerValidatorCmd.Flags().StringVar(&cometBFTSvr, "comet-bft-svr", "localhost:26657", "Comet BFT gRPC endpoint")
 	registerValidatorCmd.Flags().StringVar(&chainID, "chain-id", "hetu_560002-1", "Cosmos chain ID")
 	registerValidatorCmd.Flags().Uint64Var(&cosmosGasLimit, "gas", 2000000, "Gas limit for the transaction")
@@ -138,7 +138,7 @@ func registerValidator(cmd *cobra.Command, args []string) {
 
 	// Validate required parameters
 	if chainGRpcURL == "" {
-		logger.Fatal("Cosmos gRPC endpoint is required. Use --cosmos-rpc flag or set in config file.")
+		logger.Fatal("Cosmos gRPC endpoint is required. Use --chain-grpc-url flag or set in config file.")
 	}
 	if chainID == "" {
 		logger.Fatal("Cosmos chain ID is required. Use --chain-id flag or set in config file.")

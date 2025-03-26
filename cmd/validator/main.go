@@ -249,7 +249,7 @@ func handleSigningRequest(conn net.Conn) {
 	}
 
 	request := buf[:n]
-	logger.Info("Received signing request: %s", string(request))
+	logger.Info("Received signing request: %s", hex.EncodeToString(request))
 
 	// Create BLS signature using the loaded key
 	var signature []byte
