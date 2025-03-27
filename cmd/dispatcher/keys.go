@@ -55,6 +55,7 @@ func generateKey(cmd *cobra.Command, args []string) {
 
 	logger.Info("Generated and saved key pairs:")
 	logger.Info("Ethereum Address: %s", keyPair.ETH.Address)
+	logger.Info("Hetu Address: %s", keyPair.HetuAddress)
 	logger.Info("Ethereum Public Key: %s", keyPair.ETH.PublicKey)
 	logger.Info("BLS Public Key: %s", keyPair.BLS.PublicKey)
 

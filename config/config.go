@@ -9,7 +9,6 @@ type DispatcherConfig struct {
 	DBName       string `json:"db_name"`
 	HTTPPort     int    `json:"http_port"`
 	TCPPort      int    `json:"tcp_port"`
-	GRPCEndpoint string `json:"grpc_endpoint"`
 	EnableReport bool   `json:"enable_report"`
 	ChainGRpcURL string `json:"chain_grpc_url"`
 	CometBFTSvr  string `json:"comet_bft_svr"`

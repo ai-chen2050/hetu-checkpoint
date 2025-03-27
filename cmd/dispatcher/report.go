@@ -119,10 +119,6 @@ func ReportBLSSignatures(validResponses map[string][]byte, req *config.Request, 
 		privKey := &ethsecp256k1.PrivKey{
 			Key: common.FromHex(keyPair.ETH.PrivateKey),
 		}
-
-		// Calculate Hetu address
-		sdkConfig := sdk.GetConfig()
-		sdkConfig.SetBech32PrefixForAccount(config.Bech32PrefixAccAddr, config.Bech32PrefixAccPub)
 		hetuAddress = sdk.AccAddress(privKey.PubKey().Address()).String()
 
 		// Store it for future use

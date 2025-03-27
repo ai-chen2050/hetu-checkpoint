@@ -6,7 +6,6 @@
     "DBname": "bls_db",
     "Httpport": 8080,
     "Tcpport": 8081,
-    "GRPCEndpoint": "localhost:9000",
     "EnableReport": true,
     "ChainGRpcURL": "localhost:9090",
     "CometBFTSvr": "localhost:26657",

@@ -7,9 +7,11 @@ import (
 	"path/filepath"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/hetu-project/hetu-checkpoint/config"
 	"github.com/hetu-project/hetu-checkpoint/crypto/bls12381"
 	"github.com/hetu-project/hetu-checkpoint/crypto/eth"
+	"github.com/hetu-project/hetu-checkpoint/crypto/ethsecp256k1"
 )
 
 // CombinedKeyPair represents both Ethereum and BLS key pairs
@@ -36,16 +38,19 @@ func GenerateKeyPair() (*CombinedKeyPair, error) {
 
 	// Generate BLS key pair
 	blsPrivKey, blsPubKey := bls12381.GenKeyPair()
-	blsPubKey = blsPrivKey.PubKeyUncompress()
+	// blsPubKey = blsPrivKey.PubKeyUncompress()
 	blsKeyPair := &BLSKeyPair{
 		PrivateKey: fmt.Sprintf("%x", blsPrivKey),
 		PublicKey:  fmt.Sprintf("%x", blsPubKey),
 	}
 
 	// Calculate Hetu address
+	privKey := &ethsecp256k1.PrivKey{
+		Key: common.FromHex(ethKeyPair.PrivateKey),
+	}
 	sdkConfig := sdk.GetConfig()
 	sdkConfig.SetBech32PrefixForAccount(config.Bech32PrefixAccAddr, config.Bech32PrefixAccPub)
-	hetuAddress := sdk.AccAddress(ethKeyPair.PublicKey).String()
+	hetuAddress := sdk.AccAddress(privKey.PubKey().Address()).String()
 
 	return &CombinedKeyPair{
 		ETH:         ethKeyPair,
@@ -182,8 +187,8 @@ func LoadKeyPair(filePath string, password string) (*CombinedKeyPair, error) {
 	}
 
 	return &CombinedKeyPair{
-		ETH: ethKeyPair,
-		BLS: &blsKeyPair,
+		ETH:         ethKeyPair,
+		BLS:         &blsKeyPair,
 		HetuAddress: hetuAddress.(string),
 	}, nil
 }

@@ -14,6 +14,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/hetu-project/hetu-checkpoint/config"
 	"github.com/hetu-project/hetu-checkpoint/crypto"
 	"github.com/hetu-project/hetu-checkpoint/logger"
@@ -113,9 +114,9 @@ func runDispatcher(cmd *cobra.Command, args []string) {
 	}
 
 	// Initialize gRPC client if endpoint is configured
-	if cfg.GRPCEndpoint != "" {
-		logger.Info("Initializing gRPC client connection to %s", cfg.GRPCEndpoint)
-		if err := InitGRPCClient(cfg.GRPCEndpoint); err != nil {
+	if cfg.ChainGRpcURL != "" {
+		logger.Info("Initializing gRPC client connection to %s", cfg.ChainGRpcURL)
+		if err := InitGRPCClient(cfg.ChainGRpcURL); err != nil {
 			logger.Warn("Failed to initialize gRPC client: %v", err)
 		} else {
 			// Ensure connection is closed when program exits
@@ -144,6 +145,10 @@ func startServer(cfg *config.DispatcherConfig) {
 	httpPort := fmt.Sprintf(":%d", cfg.HTTPPort)
 	tcpPort := fmt.Sprintf(":%d", cfg.TCPPort)
 
+	// Calculate Hetu address
+	sdkConfig := sdk.GetConfig()
+	sdkConfig.SetBech32PrefixForAccount(config.Bech32PrefixAccAddr, config.Bech32PrefixAccPub)
+	
 	http.HandleFunc("/reqblssign", func(w http.ResponseWriter, r *http.Request) {
 		handleRequest(w, r, cfg)
 	})
