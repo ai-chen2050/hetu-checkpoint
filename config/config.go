@@ -24,6 +24,7 @@ type ValidatorConfig struct {
 	DBName                  string `json:"db_name"`
 	DispatcherTcp           string `json:"dispatcher_tcp"`
 	Port                    int    `json:"port"`
+	ListenAddr              string `json:"listen_addr"`
 	ChainRpcURL             string `json:"chain_rpc_url"`
 	StakingTokenAddress     string `json:"staking_token_address"`
 	ValidatorStakingAddress string `json:"validator_staking_address"`

@@ -2,17 +2,12 @@ package main
 
 import (
 	"fmt"
-	"net"
 	"os"
-	"time"
 
 	"github.com/spf13/cobra"
 
-	"encoding/hex"
-
 	"github.com/hetu-project/hetu-checkpoint/config"
 	"github.com/hetu-project/hetu-checkpoint/crypto"
-	"github.com/hetu-project/hetu-checkpoint/crypto/bls12381"
 	"github.com/hetu-project/hetu-checkpoint/logger"
 	"github.com/hetu-project/hetu-checkpoint/store"
 )
@@ -85,209 +80,20 @@ func runValidator(cmd *cobra.Command, args []string) {
 
 	// Initialize database client only if enabled
 	if enableDB {
-		logger.Info("Database persistence enabled, initializing connection...")
-		dbClient, err = store.NewDBClient(store.Config{
-			Host:     cfg.DBHost,
-			Port:     cfg.DBPort,
-			User:     cfg.DBUser,
-			Password: cfg.DBPassword,
-			DBName:   cfg.DBName,
-		})
-		if err != nil {
-			logger.Fatal("Failed to initialize database client: %v", err)
-		}
+		initializeDatabase(cfg)
 		defer dbClient.Close()
-
-		// Create database tables
-		if err := dbClient.CreateValidatorTables(); err != nil {
-			logger.Fatal("Failed to create database tables: %v", err)
-		}
-		logger.Info("Database initialized successfully")
 	}
 
-	// Start the server
-	startServer(cfg)
+	// Start the validator service
+	startValidatorService(cfg)
 }
 
-func startServer(cfg *config.ValidatorConfig) {
-	// Start TCP server to accept connections
-	var listener net.Listener
-	var err error
+func startValidatorService(cfg *config.ValidatorConfig) {
+	// Start TCP server in a goroutine
+	go startListeningServer(cfg)
 
-	if cfg.Port == 0 {
-		// Listen on any available port
-		listener, err = net.Listen("tcp", ":0")
-	} else {
-		// Listen on the specified port
-		listener, err = net.Listen("tcp", fmt.Sprintf(":%d", cfg.Port))
-	}
-
-	if err != nil {
-		logger.Fatal("Error starting TCP server: %v", err)
-	}
-	defer listener.Close()
-
-	localAddr := listener.Addr().String()
-	logger.Info("Validator listening on %s", localAddr)
-
-	// Connect to dispatcher for heartbeat
-	go connectToDispatcher(localAddr, cfg.DispatcherTcp)
-
-	// Accept connections for signing requests
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			logger.Error("Error accepting connection: %v", err)
-			continue
-		}
-		go handleSigningRequest(conn)
-	}
-}
-
-func connectToDispatcher(localAddr string, dispatcher string) {
-	for {
-		conn, err := net.Dial("tcp", dispatcher)
-		if err != nil {
-			logger.Error("Error connecting to dispatcher: %v", err)
-			logger.Info("Retrying connection in 5 seconds...")
-			time.Sleep(5 * time.Second)
-			continue
-		}
-
-		logger.Info("Connected to dispatcher at %s", dispatcher)
-
-		// Ensure keyPair is loaded
-		if keyPair == nil {
-			logger.Error("Key pair not loaded")
-			conn.Close()
-			time.Sleep(5 * time.Second)
-			continue
-		}
-
-		// Send address information including local address and ETH address
-		addrInfo := fmt.Sprintf("%s|%s", localAddr, keyPair.ETH.Address)
-
-		// Send local address as first message
-		_, err = conn.Write([]byte(addrInfo))
-		if err != nil {
-			logger.Error("Failed to send local address: %v", err)
-			conn.Close()
-			time.Sleep(5 * time.Second)
-			continue
-		}
-
-		// Set a read deadline for the first heartbeat cycle
-		conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-
-		// Start heartbeat with connection monitoring
-		heartbeatDone := make(chan struct{})
-		go func() {
-			handleHeartbeat(conn)
-			close(heartbeatDone)
-		}()
-
-		// Wait for heartbeat to finish (connection lost)
-		<-heartbeatDone
-		logger.Warn("Connection lost, attempting to reconnect...")
-		time.Sleep(5 * time.Second)
-	}
-}
-
-func handleHeartbeat(conn net.Conn) {
-	defer conn.Close()
-
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-
-	// Set up a failure counter
-	failureCount := 0
-	const maxFailures = 3
-
-	for range ticker.C {
-		// Set a deadline for this heartbeat cycle
-		conn.SetDeadline(time.Now().Add(2 * time.Second))
-
-		_, err := conn.Write([]byte("ping"))
-		if err != nil {
-			logger.Error("Failed to send heartbeat: %v", err)
-			return
-		}
-
-		// Read response
-		buf := make([]byte, 4)
-		n, err := conn.Read(buf)
-		if err != nil {
-			failureCount++
-			logger.Error("Error reading heartbeat response: %v (failure %d/%d)",
-				err, failureCount, maxFailures)
-
-			if failureCount >= maxFailures {
-				logger.Warn("Too many heartbeat failures, reconnecting...")
-				return
-			}
-			continue
-		}
-
-		// Reset failure counter on successful heartbeat
-		failureCount = 0
-
-		if string(buf[:n]) != "pong" {
-			logger.Warn("Unexpected heartbeat response: %s", string(buf[:n]))
-		}
-	}
-}
-
-func handleSigningRequest(conn net.Conn) {
-	defer conn.Close()
-
-	// Read request
-	buf := make([]byte, 1024)
-	n, err := conn.Read(buf)
-	if err != nil {
-		logger.Error("Error reading request: %v", err)
-		return
-	}
-
-	request := buf[:n]
-	logger.Info("Received signing request: %s", hex.EncodeToString(request))
-
-	// Create BLS signature using the loaded key
-	var signature []byte
-	if keyPair != nil {
-		// Convert BLS private key from hex string to bytes
-		blsPrivKeyHex := keyPair.BLS.PrivateKey
-		blsPrivKeyBytes, err := hex.DecodeString(blsPrivKeyHex)
-		if err != nil {
-			logger.Error("Failed to decode BLS private key: %v", err)
-			return
-		}
-
-		// Sign the message using BLS
-		blsSig := bls12381.Sign(blsPrivKeyBytes, request)
-		signature = blsSig
-		logger.Debug("Created BLS signature: %x", signature)
-	} else {
-		logger.Error("No key pair loaded, cannot sign message")
-		return
-	}
-
-	// Store the response in database if enabled
-	if enableDB {
-		validatorID := conn.LocalAddr().String()
-		_, err = dbClient.InsertValSignResponse(-1, validatorID, hex.EncodeToString(signature))
-		if err != nil {
-			logger.Error("Failed to store sign response: %v", err)
-		}
-	}
-
-	// Send response
-	_, err = conn.Write(signature)
-	if err != nil {
-		logger.Error("Error sending response: %v", err)
-		return
-	}
-
-	logger.Debug("Sent BLS signature: %x", signature)
+	// Connect to dispatcher and maintain connection
+	maintainDispatcherConnection(cfg)
 }
 
 func main() {

@@ -67,7 +67,8 @@ func LoadValidatorConfig(configFile string, cmdPort int) (*ValidatorConfig, erro
 	}
 
 	// Set defaults
-	v.SetDefault("port", 0) // 0 means random port
+	v.SetDefault("port", 0)                // 0 means random port
+	v.SetDefault("listen_addr", "0.0.0.0") // Default listen address
 
 	// Read the config
 	if err := v.ReadInConfig(); err != nil {

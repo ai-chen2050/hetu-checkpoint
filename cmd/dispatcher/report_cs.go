@@ -29,12 +29,6 @@ var (
 	reportMsgSvc types.MsgClient
 )
 
-// Define the request structure to match the client request
-type Request struct {
-	ValidatorAddress string              `json:"validator_address"`
-	Checkpoint       types.RawCheckpoint `json:"checkpoint"`
-}
-
 // InitReportClient initializes the Cosmos gRPC client for reporting
 func InitReportClient(endpoint string) error {
 	if endpoint == "" {
@@ -66,8 +60,8 @@ func CloseReportClient() {
 	}
 }
 
-// ReportBLSSignatures reports BLS signatures to the chain
-func ReportBLSSignatures(validResponses map[string][]byte, req *config.Request, cfg *config.DispatcherConfig) {
+// ReportBLSSignaturesByCosmosTx reports BLS signatures to the chain
+func ReportBLSSignaturesByCosmosTx(validResponses map[string][]byte, req *config.Request, cfg *config.DispatcherConfig) {
 	// Use the epoch number from the checkpoint
 	epochNum := req.Checkpoint.EpochNum
 	if epochNum == 0 {

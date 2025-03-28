@@ -1,16 +1,11 @@
 package main
 
 import (
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"os"
-	"strings"
 	"sync"
-	"time"
 
 	"github.com/spf13/cobra"
 
@@ -93,24 +88,7 @@ func runDispatcher(cmd *cobra.Command, args []string) {
 
 	// Initialize database client only if enabled
 	if enableDB {
-		logger.Info("Database persistence enabled, initializing connection...")
-		dbClient, err = store.NewDBClient(store.Config{
-			Host:     cfg.DBHost,
-			Port:     cfg.DBPort,
-			User:     cfg.DBUser,
-			Password: cfg.DBPassword,
-			DBName:   cfg.DBName,
-		})
-		if err != nil {
-			logger.Fatal("Failed to initialize database client: %v", err)
-		}
-		defer dbClient.Close()
-
-		// Create database tables
-		if err := dbClient.CreateDispatcherTables(); err != nil {
-			logger.Fatal("Failed to create database tables: %v", err)
-		}
-		logger.Info("Database initialized successfully")
+		initializeDatabase(cfg)
 	}
 
 	// Initialize gRPC client if endpoint is configured
@@ -125,6 +103,35 @@ func runDispatcher(cmd *cobra.Command, args []string) {
 	}
 
 	// Log reporting status
+	logReportingStatus(cfg)
+
+	// Start the server
+	startServer(cfg)
+}
+
+func initializeDatabase(cfg *config.DispatcherConfig) {
+	logger.Info("Database persistence enabled, initializing connection...")
+	var err error
+	dbClient, err = store.NewDBClient(store.Config{
+		Host:     cfg.DBHost,
+		Port:     cfg.DBPort,
+		User:     cfg.DBUser,
+		Password: cfg.DBPassword,
+		DBName:   cfg.DBName,
+	})
+	if err != nil {
+		logger.Fatal("Failed to initialize database client: %v", err)
+	}
+	defer dbClient.Close()
+
+	// Create database tables
+	if err := dbClient.CreateDispatcherTables(); err != nil {
+		logger.Fatal("Failed to create database tables: %v", err)
+	}
+	logger.Info("Database initialized successfully")
+}
+
+func logReportingStatus(cfg *config.DispatcherConfig) {
 	if cfg.EnableReport {
 		logger.Info("BLS signature reporting is enabled")
 		if cfg.ChainGRpcURL == "" {
@@ -136,9 +143,6 @@ func runDispatcher(cmd *cobra.Command, args []string) {
 	} else {
 		logger.Info("BLS signature reporting is disabled")
 	}
-
-	// Start the server
-	startServer(cfg)
 }
 
 func startServer(cfg *config.DispatcherConfig) {
@@ -148,10 +152,13 @@ func startServer(cfg *config.DispatcherConfig) {
 	// Calculate Hetu address
 	sdkConfig := sdk.GetConfig()
 	sdkConfig.SetBech32PrefixForAccount(config.Bech32PrefixAccAddr, config.Bech32PrefixAccPub)
-	
+
+	// Set up HTTP handler
 	http.HandleFunc("/reqblssign", func(w http.ResponseWriter, r *http.Request) {
 		handleRequest(w, r, cfg)
 	})
+
+	// Start HTTP server
 	go func() {
 		logger.Info("Starting HTTP server on port %d", cfg.HTTPPort)
 		if err := http.ListenAndServe(httpPort, nil); err != nil {
@@ -159,6 +166,7 @@ func startServer(cfg *config.DispatcherConfig) {
 		}
 	}()
 
+	// Start TCP server
 	listener, err := net.Listen("tcp", tcpPort)
 	if err != nil {
 		logger.Fatal("Error starting TCP server: %v", err)
@@ -166,6 +174,8 @@ func startServer(cfg *config.DispatcherConfig) {
 	defer listener.Close()
 
 	logger.Info("The dispatcher is listening on TCP port %d, waiting for connections", cfg.TCPPort)
+
+	// Accept validator connections
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
@@ -174,280 +184,6 @@ func startServer(cfg *config.DispatcherConfig) {
 		}
 		go handleValidatorConnection(conn)
 	}
-}
-
-func handleValidatorConnection(conn net.Conn) {
-	buffer := make([]byte, 1024)
-
-	// Read validator address information
-	n, err := conn.Read(buffer)
-	if err != nil {
-		logger.Error("Failed to read validator address: %v", err)
-		conn.Close()
-		return
-	}
-
-	addrInfo := string(buffer[:n])
-	logger.Info("Received validator address: %s", addrInfo)
-
-	// Skip HTTP/2 protocol messages
-	if strings.HasPrefix(addrInfo, "PRI * HTTP/2.0") {
-		logger.Warn("Received HTTP/2 protocol message instead of validator address, closing connection")
-		conn.Close()
-		return
-	}
-
-	// Parse address information, format is "listen_addr|eth_addr"
-	parts := strings.Split(addrInfo, "|")
-	if len(parts) != 2 {
-		logger.Error("Invalid validator address format: %s", addrInfo)
-		conn.Close()
-		return
-	}
-
-	validatorAddr := parts[0]
-	validatorEthAddr := parts[1]
-
-	// Store connection and address information
-	validators.Lock()
-	if validators.connections == nil {
-		validators.connections = make(map[net.Conn]bool)
-	}
-	validators.connections[conn] = true
-
-	// Store validator's listening address
-	if validators.addresses == nil {
-		validators.addresses = make(map[net.Conn]string)
-	}
-	validators.addresses[conn] = validatorAddr
-
-	// Store validator's ETH address
-	if validators.ethAddresses == nil {
-		validators.ethAddresses = make(map[net.Conn]string)
-	}
-	validators.ethAddresses[conn] = validatorEthAddr
-	validators.Unlock()
-
-	logger.Info("New validator connected. Total validators: %d", len(validators.connections))
-
-	// Handle connection until it's closed
-	for {
-		n, err := conn.Read(buffer)
-		if err != nil {
-			logger.Info("Validator disconnected: %v", err)
-			validators.Lock()
-			delete(validators.connections, conn)
-			delete(validators.addresses, conn)
-			delete(validators.ethAddresses, conn)
-			conn.Close()
-			validators.Unlock()
-			logger.Info("Validator removed. Remaining validators: %d", len(validators.connections))
-			return
-		}
-
-		data := string(buffer[:n])
-
-		// Skip HTTP/2 protocol messages
-		if strings.HasPrefix(data, "PRI * HTTP/2.0") {
-			logger.Warn("Received HTTP/2 protocol message, ignoring")
-			continue
-		}
-
-		if data != "ping" {
-			logger.Debug("Received data from validator: %s", data)
-		}
-
-		// If it's a heartbeat, respond with pong
-		if data == "ping" {
-			_, err = conn.Write([]byte("pong"))
-			if err != nil {
-				logger.Error("Failed to send heartbeat response: %v", err)
-				validators.Lock()
-				delete(validators.connections, conn)
-				delete(validators.addresses, conn)
-				delete(validators.ethAddresses, conn)
-				conn.Close()
-				validators.Unlock()
-				return
-			}
-		}
-	}
-}
-
-func handleRequest(w http.ResponseWriter, r *http.Request, cfg *config.DispatcherConfig) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "Invalid request", http.StatusBadRequest)
-		return
-	}
-
-	// Parse the request to get checkpoint data
-	var req config.Request
-	if err := json.Unmarshal(body, &req); err != nil {
-		logger.Error("Failed to parse request message: %v", err)
-		return
-	}
-
-	logger.Info("Received client request: %s", string(body))
-
-	// Generate message to be signed
-	msgToBeSigned := config.GetSignBytes(req.Checkpoint.EpochNum-1, *req.Checkpoint.BlockHash)
-
-	// Store the request in database if enabled
-	var request *store.SignRequest
-	if enableDB {
-		var err error
-		request, err = dbClient.InsertDisSignRequest(string(body))
-		if err != nil {
-			logger.Error("Failed to store sign request: %v", err)
-			// Continue processing even if DB storage fails
-		}
-	}
-
-	var validatorClients []config.ValidatorClient
-
-	// Get validator addresses
-	validators.RLock()
-	for conn := range validators.connections {
-		addr := validators.addresses[conn]
-		if addr != "" {
-			validatorClients = append(validatorClients, config.ValidatorClient{
-				Conn: conn,
-				Addr: addr,
-			})
-		}
-	}
-	validatorCount := len(validatorClients)
-	validators.RUnlock()
-
-	if validatorCount == 0 {
-		logger.Warn("No validators connected")
-		http.Error(w, "No validators connected", http.StatusInternalServerError)
-		return
-	}
-
-	// Create channels for collecting responses
-	results := make(chan config.ValidatorResponse, validatorCount)
-
-	// Create new connections for each request
-	for _, vc := range validatorClients {
-		go func(addr string) {
-			// Create a new connection for this request
-			reqConn, err := net.Dial("tcp", addr)
-			if err != nil {
-				results <- config.ValidatorResponse{Error: fmt.Errorf("connection error: %v", err)}
-				return
-			}
-			defer reqConn.Close()
-
-			// Set timeouts
-			reqConn.SetDeadline(time.Now().Add(900 * time.Millisecond))
-
-			// Send request
-			_, err = reqConn.Write(msgToBeSigned)
-			if err != nil {
-				results <- config.ValidatorResponse{Error: fmt.Errorf("write error: %v", err)}
-				return
-			}
-
-			// Read response
-			var responseData []byte
-			buffer := make([]byte, 1024)
-
-			for {
-				n, err := reqConn.Read(buffer)
-				if err != nil {
-					if len(responseData) == 0 {
-						results <- config.ValidatorResponse{Error: fmt.Errorf("read error: %v", err)}
-					} else {
-						results <- config.ValidatorResponse{Response: responseData}
-					}
-					return
-				}
-				responseData = append(responseData, buffer[:n]...)
-
-				// If we received less than buffer size, we've got the complete message
-				if n < len(buffer) {
-					break
-				}
-			}
-
-			logger.Debug("Received response from validator: %s", string(responseData))
-			results <- config.ValidatorResponse{Response: responseData}
-		}(vc.Addr)
-	}
-
-	// Collect responses with timeout
-	timeout := time.After(1 * time.Second)
-	validResponses := make(map[string][]byte)
-	errorCount := 0
-
-	// Wait for all responses or timeout
-	for i := 0; i < validatorCount; i++ {
-		select {
-		case result := <-results:
-			if result.Error != nil {
-				logger.Error("Validator error: %v", result.Error)
-				errorCount++
-			} else {
-				validators.RLock()
-				ethAddr := validators.ethAddresses[validatorClients[i].Conn]
-				validators.RUnlock()
-				validResponses[ethAddr] = result.Response
-				logger.Debug("Received valid response: %s", string(result.Response))
-			}
-		case <-timeout:
-			logger.Warn("Timeout reached. Received %d valid responses, %d errors, %d validators did not respond",
-				len(validResponses), errorCount, validatorCount-len(validResponses)-errorCount)
-			goto respondToClient
-		}
-	}
-
-respondToClient:
-	if len(validResponses) == 0 {
-		logger.Error("No valid responses received from validators")
-		if enableDB && request != nil {
-			_ = dbClient.UpdateDisSignRequestStatus(request.ID, "FAILED")
-		}
-		http.Error(w, "No valid responses received from validators", http.StatusInternalServerError)
-		return
-	}
-
-	// Store validator responses if DB is enabled
-	if enableDB && request != nil {
-		for ethAddr, response := range validResponses {
-			_, err := dbClient.InsertDisSignResponse(request.ID, ethAddr, hex.EncodeToString(response))
-			if err != nil {
-				logger.Error("Failed to store validator response: %v", err)
-			}
-		}
-		err := dbClient.UpdateDisSignRequestStatus(request.ID, "COMPLETED")
-		if err != nil {
-			logger.Error("Failed to update request status: %v", err)
-		}
-	}
-
-	// Report BLS signatures if enabled, firstly
-	if cfg.EnableReport {
-		go ReportBLSSignatures(validResponses, &req, cfg)
-	}
-
-	// Convert binary responses to map for JSON response
-	jsonResponses := make(map[string]string)
-	for ethAddr, response := range validResponses {
-		jsonResponses[ethAddr] = hex.EncodeToString(response)
-	}
-
-	// Write summary of responses
-	w.Header().Set("Content-Type", "application/json")
-	response := config.Response{
-		TotalValidators:    validatorCount,
-		ResponsesReceived:  len(validResponses),
-		Errors:             errorCount,
-		NoResponse:         validatorCount - len(validResponses) - errorCount,
-		ValidatorResponses: jsonResponses,
-	}
-	json.NewEncoder(w).Encode(response)
 }
 
 func main() {
