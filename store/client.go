@@ -58,8 +58,14 @@ func NewDBClient(cfg Config) (*DBClient, error) {
 		return nil, fmt.Errorf("error connecting to database: %v", err)
 	}
 
+	// Set connection pool settings
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(5 * time.Minute)
+
 	// Test the connection
 	if err := db.Ping(); err != nil {
+		db.Close() // Close the connection if ping fails
 		return nil, fmt.Errorf("error pinging database: %v", err)
 	}
 
@@ -99,6 +105,26 @@ func (c *DBClient) CreateDispatcherTables() error {
 	`)
 	if err != nil {
 		return fmt.Errorf("error creating sign_responses table: %v", err)
+	}
+
+	// Create aggregated_checkpoints table
+	_, err = c.db.Exec(`
+		CREATE TABLE IF NOT EXISTS aggregated_checkpoints (
+			id SERIAL PRIMARY KEY,
+			request_id INTEGER REFERENCES sign_requests(id),
+			epoch_num BIGINT NOT NULL,
+			block_hash TEXT NOT NULL,
+			bitmap TEXT NOT NULL,
+			bls_multi_sig TEXT,
+			bls_aggr_pk TEXT,
+			power_sum BIGINT NOT NULL,
+			status VARCHAR(20) NOT NULL,
+			validator_count INTEGER NOT NULL,
+			created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+		)
+	`)
+	if err != nil {
+		return fmt.Errorf("error creating aggregated_checkpoints table: %v", err)
 	}
 
 	return nil
@@ -192,4 +218,76 @@ func (c *DBClient) InsertValSignResponse(requestID int64, validatorID, signature
 		return nil, fmt.Errorf("error inserting sign response: %v", err)
 	}
 	return resp, nil
+}
+
+// InsertAggregatedCheckpoint inserts a new aggregated checkpoint record
+func (c *DBClient) InsertAggregatedCheckpoint(
+	requestID int64,
+	epochNum uint64,
+	blockHash string,
+	bitmap string,
+	blsMultiSig string,
+	blsAggrPk string,
+	powerSum uint64,
+	status string,
+	validatorCount int,
+) (*AggregatedCheckpoint, error) {
+	query := `
+		INSERT INTO aggregated_checkpoints (
+			request_id, epoch_num, block_hash, bitmap, bls_multi_sig, 
+			bls_aggr_pk, power_sum, status, validator_count, created_at
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		RETURNING id, request_id, epoch_num, block_hash, bitmap, bls_multi_sig, 
+		          bls_aggr_pk, power_sum, status, validator_count, created_at
+	`
+	checkpoint := &AggregatedCheckpoint{}
+	err := c.db.QueryRowx(
+		query,
+		requestID,
+		epochNum,
+		blockHash,
+		bitmap,
+		blsMultiSig,
+		blsAggrPk,
+		powerSum,
+		status,
+		validatorCount,
+		time.Now(),
+	).StructScan(checkpoint)
+	if err != nil {
+		return nil, fmt.Errorf("error inserting aggregated checkpoint: %v", err)
+	}
+	return checkpoint, nil
+}
+
+// GetAggregatedCheckpointByEpoch retrieves an aggregated checkpoint by epoch number
+func (c *DBClient) GetAggregatedCheckpointByEpoch(epochNum uint64) (*AggregatedCheckpoint, error) {
+	query := `
+		SELECT * FROM aggregated_checkpoints
+		WHERE epoch_num = $1
+		ORDER BY created_at DESC
+		LIMIT 1
+	`
+	checkpoint := &AggregatedCheckpoint{}
+	err := c.db.Get(checkpoint, query, epochNum)
+	if err != nil {
+		return nil, fmt.Errorf("error getting aggregated checkpoint: %v", err)
+	}
+	return checkpoint, nil
+}
+
+// GetLatestAggregatedCheckpoints retrieves the latest aggregated checkpoints
+func (c *DBClient) GetLatestAggregatedCheckpoints(limit int) ([]*AggregatedCheckpoint, error) {
+	query := `
+		SELECT * FROM aggregated_checkpoints
+		ORDER BY epoch_num DESC
+		LIMIT $1
+	`
+	checkpoints := []*AggregatedCheckpoint{}
+	err := c.db.Select(&checkpoints, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("error getting latest aggregated checkpoints: %v", err)
+	}
+	return checkpoints, nil
 }

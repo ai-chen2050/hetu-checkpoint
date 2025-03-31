@@ -12,6 +12,7 @@ import (
 
 	"github.com/hetu-project/hetu-checkpoint/config"
 	"github.com/hetu-project/hetu-checkpoint/logger"
+	"github.com/hetu-project/hetu-checkpoint/proto/types"
 	"github.com/hetu-project/hetu-checkpoint/store"
 )
 
@@ -33,7 +34,7 @@ func handleRequest(w http.ResponseWriter, r *http.Request, cfg *config.Dispatche
 	logger.Info("Received client request: %s", string(body))
 
 	// Generate message to be signed
-	msgToBeSigned := config.GetSignBytes(req.Checkpoint.EpochNum-1, *req.Checkpoint.BlockHash)
+	msgToBeSigned := config.GetSignBytes(req.CheckpointWithMeta.Ckpt.EpochNum-1, *req.CheckpointWithMeta.Ckpt.BlockHash)
 
 	// Store the request in database if enabled
 	var request *store.SignRequest
@@ -64,8 +65,9 @@ func handleRequest(w http.ResponseWriter, r *http.Request, cfg *config.Dispatche
 
 	// Collect responses with timeout
 	validResponses, errorCount := collectValidatorResponses(validatorClients, results, validatorCount)
+	validRespLen := len(validResponses)
 
-	if len(validResponses) == 0 {
+	if validRespLen == 0 {
 		logger.Error("No valid responses received from validators")
 		if enableDB && request != nil {
 			_ = dbClient.UpdateDisSignRequestStatus(request.ID, "FAILED")
@@ -79,7 +81,27 @@ func handleRequest(w http.ResponseWriter, r *http.Request, cfg *config.Dispatche
 		storeValidatorResponses(request.ID, validResponses)
 	}
 
-	// Report BLS signatures if enabled, firstly
+	// Aggregate signatures and update checkpoint
+	aggregatedCkpt, err := AggregateSignatures(validResponses, &req, cfg)
+	if err != nil {
+		logger.Error("Failed to aggregate signatures: %v", err)
+	} else {
+		logger.Info("Successfully aggregated %d signatures for epoch %d",
+			validRespLen, req.CheckpointWithMeta.Ckpt.EpochNum)
+
+		// Update the request with the aggregated checkpoint
+		req.CheckpointWithMeta = *aggregatedCkpt
+
+		// Only log bitmap if aggregation was successful
+		logger.Info("Aggregated checkpoint's bitmap: %s", hex.EncodeToString(aggregatedCkpt.Ckpt.Bitmap))
+
+		// Store aggregated checkpoint if DB is enabled
+		if enableDB && request != nil {
+			storeAggregatedCheckpoint(aggregatedCkpt, request, validRespLen)
+		}
+	}
+
+	// Report BLS signatures if enabled
 	if cfg.EnableReport {
 		go ReportBLSSignaturesByCosmosTx(validResponses, &req, cfg)
 	}
@@ -94,12 +116,56 @@ func handleRequest(w http.ResponseWriter, r *http.Request, cfg *config.Dispatche
 	w.Header().Set("Content-Type", "application/json")
 	response := config.Response{
 		TotalValidators:    validatorCount,
-		ResponsesReceived:  len(validResponses),
+		ResponsesReceived:  validRespLen,
 		Errors:             errorCount,
-		NoResponse:         validatorCount - len(validResponses) - errorCount,
+		NoResponse:         validatorCount - validRespLen - errorCount,
 		ValidatorResponses: jsonResponses,
 	}
 	json.NewEncoder(w).Encode(response)
+}
+
+// storeAggregatedCheckpoint stores the aggregated checkpoint in the database
+func storeAggregatedCheckpoint(aggregatedCkpt *types.RawCheckpointWithMeta, request *store.SignRequest, validRespLen int) {
+	if dbClient == nil {
+		logger.Error("Database client is not initialized")
+		return
+	}
+
+	// Convert binary data to hex strings for storage
+	blockHashHex := hex.EncodeToString(*aggregatedCkpt.Ckpt.BlockHash)
+	bitmapHex := hex.EncodeToString(aggregatedCkpt.Ckpt.Bitmap)
+
+	var blsMultiSigHex, blsAggrPkHex string
+	if aggregatedCkpt.Ckpt.BlsMultiSig != nil {
+		blsMultiSigHex = hex.EncodeToString(*aggregatedCkpt.Ckpt.BlsMultiSig)
+	}
+	if aggregatedCkpt.BlsAggrPk != nil {
+		blsAggrPkHex = hex.EncodeToString(*aggregatedCkpt.BlsAggrPk)
+	}
+
+	// Determine status
+	status := "PENDING"
+	if aggregatedCkpt.Status == types.Sealed {
+		status = "SEALED"
+	}
+
+	// Store in database
+	_, err := dbClient.InsertAggregatedCheckpoint(
+		request.ID,
+		aggregatedCkpt.Ckpt.EpochNum,
+		blockHashHex,
+		bitmapHex,
+		blsMultiSigHex,
+		blsAggrPkHex,
+		aggregatedCkpt.PowerSum,
+		status,
+		validRespLen,
+	)
+	if err != nil {
+		logger.Error("Failed to store aggregated checkpoint: %v", err)
+	} else {
+		logger.Info("Stored aggregated checkpoint for epoch %d in database", aggregatedCkpt.Ckpt.EpochNum)
+	}
 }
 
 // handleValidatorConnection manages a connection from a validator
@@ -136,7 +202,12 @@ func handleValidatorConnection(conn net.Conn) {
 	validatorEthAddr := parts[1]
 
 	// Store connection and address information
-	registerValidator(conn, validatorAddr, validatorEthAddr)
+	if !registerValidator(conn, validatorAddr, validatorEthAddr) {
+		// close the connection
+		conn.Write([]byte("ERROR: Maximum validator connections reached"))
+		conn.Close()
+		return
+	}
 
 	// Handle connection until it's closed
 	handleValidatorHeartbeat(conn)

@@ -42,7 +42,7 @@ mkdir -p logs
 
 # Start dispatcher
 echo "Starting dispatcher..."
-$BINARY_DIR/dispatcher --config $CONFIG_DIR/dis_config.json >logs/dispatcher.log 2>&1 &
+"$BINARY_DIR"/dispatcher --config "$CONFIG_DIR"/dis_config.json >logs/dispatcher.log 2>&1 &
 DISPATCHER_PID=$!
 echo "Dispatcher started with PID: $DISPATCHER_PID"
 
@@ -50,10 +50,10 @@ echo "Dispatcher started with PID: $DISPATCHER_PID"
 sleep 2
 
 # Start validators
-for ((i = 0; i < $NUM_VALIDATORS; i++)); do
+for ((i = 0; i < "$NUM_VALIDATORS"; i++)); do
     echo "Starting validator $i..."
-    $BINARY_DIR/validator --config $CONFIG_DIR/val_config.json --id $i >logs/validator_$i.log 2>&1 &
-    VALIDATOR_PIDS[$i]=$!
+    "$BINARY_DIR"/validator --config "$CONFIG_DIR"/val_config.json --id $i >logs/validator_$i.log 2>&1 &
+    VALIDATOR_PIDS["$i"]=$!
     echo "Validator $i started with PID: ${VALIDATOR_PIDS[$i]}"
     sleep 1
 done

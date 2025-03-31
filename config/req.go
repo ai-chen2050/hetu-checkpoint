@@ -6,8 +6,8 @@ import (
 
 // Request represents a client request to the dispatcher
 type Request struct {
-	ValidatorAddress string              `json:"validator_address"`
-	Checkpoint       types.RawCheckpoint `json:"checkpoint"`
+	ValidatorAddress   string                      `json:"validator_address"`
+	CheckpointWithMeta types.RawCheckpointWithMeta `json:"checkpoint_with_meta"`
 }
 
 // Response represents the dispatcher's response to a client request

@@ -19,3 +19,18 @@ type SignResponse struct {
 	Status      string    `db:"status"`
 	CreatedAt   time.Time `db:"created_at"`
 }
+
+// AggregatedCheckpoint represents an aggregated checkpoint record
+type AggregatedCheckpoint struct {
+	ID             int64     `db:"id"`
+	RequestID      int64     `db:"request_id"`
+	EpochNum       uint64    `db:"epoch_num"`
+	BlockHash      string    `db:"block_hash"`
+	Bitmap         string    `db:"bitmap"`
+	BlsMultiSig    string    `db:"bls_multi_sig"`
+	BlsAggrPk      string    `db:"bls_aggr_pk"`
+	PowerSum       uint64    `db:"power_sum"`
+	Status         string    `db:"status"`
+	ValidatorCount int       `db:"validator_count"`
+	CreatedAt      time.Time `db:"created_at"`
+}

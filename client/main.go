@@ -14,13 +14,16 @@ import (
 
 func main() {
 	url := "http://localhost:8080/reqblssign"
+	ckpt := &types.RawCheckpoint{
+		EpochNum:    100,
+		BlockHash:   &types.BlockHash{}, // Initialize with appropriate hash
+		Bitmap:      []byte("0x1234567890abcdef..."),
+		BlsMultiSig: nil,
+	}
 	request := config.Request{
-		ValidatorAddress: "hetu1...",
-		Checkpoint: types.RawCheckpoint{
-			EpochNum:    100,
-			BlockHash:   &types.BlockHash{}, // Initialize with appropriate hash
-			Bitmap:      []byte("0x1234567890abcdef..."),
-			BlsMultiSig: nil,
+			ValidatorAddress: "hetu1...",
+			CheckpointWithMeta: types.RawCheckpointWithMeta{
+			Ckpt: ckpt,
 		},
 	}
 

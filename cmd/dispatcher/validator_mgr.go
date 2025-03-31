@@ -10,8 +10,16 @@ import (
 )
 
 // registerValidator adds a validator to the registry
-func registerValidator(conn net.Conn, validatorAddr, validatorEthAddr string) {
+func registerValidator(conn net.Conn, validatorAddr, validatorEthAddr string) bool {
 	validators.Lock()
+	defer validators.Unlock()
+	
+	// Check if the maximum number of validator connections is reached
+	if len(validators.connections) >= MaxValidatorConnections {
+		logger.Warn("Maximum validator connections (%d) reached, rejecting new connection", MaxValidatorConnections)
+		return false
+	}
+	
 	if validators.connections == nil {
 		validators.connections = make(map[net.Conn]bool)
 	}
@@ -28,9 +36,10 @@ func registerValidator(conn net.Conn, validatorAddr, validatorEthAddr string) {
 		validators.ethAddresses = make(map[net.Conn]string)
 	}
 	validators.ethAddresses[conn] = validatorEthAddr
-	validators.Unlock()
 
-	logger.Info("New validator connected. Total validators: %d", len(validators.connections))
+	logger.Info("New validator connected. Total validators: %d/%d", 
+		len(validators.connections), MaxValidatorConnections)
+	return true
 }
 
 // unregisterValidator removes a validator from the registry
@@ -98,12 +107,18 @@ func collectValidatorResponses(validatorClients []config.ValidatorClient, result
 
 // storeValidatorResponses stores validator responses in the database
 func storeValidatorResponses(requestID int64, validResponses map[string][]byte) {
+	if dbClient == nil {
+		logger.Error("Database client is not initialized")
+		return
+	}
+
 	for ethAddr, response := range validResponses {
 		_, err := dbClient.InsertDisSignResponse(requestID, ethAddr, hex.EncodeToString(response))
 		if err != nil {
 			logger.Error("Failed to store validator response: %v", err)
 		}
 	}
+
 	err := dbClient.UpdateDisSignRequestStatus(requestID, "COMPLETED")
 	if err != nil {
 		logger.Error("Failed to update request status: %v", err)

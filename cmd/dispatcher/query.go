@@ -52,6 +52,11 @@ func InitGRPCClient(endpoint string) error {
 		return fmt.Errorf("gRPC endpoint is empty")
 	}
 
+	// If we already have a connection, don't create a new one
+	if grpcConn != nil && queryClient != nil {
+		return nil
+	}
+
 	var err error
 	// Close existing connection if any
 	if grpcConn != nil {
@@ -66,6 +71,7 @@ func InitGRPCClient(endpoint string) error {
 
 	// Create client
 	queryClient = types.NewQueryClient(grpcConn)
+	logger.Info("gRPC client initialized to endpoint: %s", endpoint)
 	return nil
 }
 

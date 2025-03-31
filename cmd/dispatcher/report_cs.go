@@ -63,7 +63,7 @@ func CloseReportClient() {
 // ReportBLSSignaturesByCosmosTx reports BLS signatures to the chain
 func ReportBLSSignaturesByCosmosTx(validResponses map[string][]byte, req *config.Request, cfg *config.DispatcherConfig) {
 	// Use the epoch number from the checkpoint
-	epochNum := req.Checkpoint.EpochNum
+	epochNum := req.CheckpointWithMeta.Ckpt.EpochNum
 	if epochNum == 0 {
 		logger.Warn("Epoch number is 0 in the request, using default value 1")
 		epochNum = 1

@@ -32,6 +32,11 @@ var (
 	dbClient *store.DBClient
 )
 
+const (
+	// MaxValidatorConnections is the maximum number of validator connections
+	MaxValidatorConnections = 512
+)
+
 func init() {
 	validators.connections = make(map[net.Conn]bool)
 	validators.addresses = make(map[net.Conn]string)
@@ -86,9 +91,29 @@ func runDispatcher(cmd *cobra.Command, args []string) {
 		logger.Info("Loaded key pair with Ethereum address: %s", keyPair.ETH.Address)
 	}
 
-	// Initialize database client only if enabled
+	// Initialize database if enabled
 	if enableDB {
-		initializeDatabase(cfg)
+		logger.Info("Database persistence enabled, initializing connection...")
+		dbClient, err = store.NewDBClient(store.Config{
+			Host:     cfg.DBHost,
+			Port:     cfg.DBPort,
+			User:     cfg.DBUser,
+			Password: cfg.DBPassword,
+			DBName:   cfg.DBName,
+		})
+		if err != nil {
+			logger.Fatal("Failed to initialize database client: %v", err)
+		}
+
+		// Ensure we don't close the connection prematurely
+		// Only close it when the application exits
+		defer dbClient.Close()
+
+		// Create database tables
+		if err := dbClient.CreateDispatcherTables(); err != nil {
+			logger.Fatal("Failed to create database tables: %v", err)
+		}
+		logger.Info("Database initialized successfully")
 	}
 
 	// Initialize gRPC client if endpoint is configured
@@ -107,28 +132,6 @@ func runDispatcher(cmd *cobra.Command, args []string) {
 
 	// Start the server
 	startServer(cfg)
-}
-
-func initializeDatabase(cfg *config.DispatcherConfig) {
-	logger.Info("Database persistence enabled, initializing connection...")
-	var err error
-	dbClient, err = store.NewDBClient(store.Config{
-		Host:     cfg.DBHost,
-		Port:     cfg.DBPort,
-		User:     cfg.DBUser,
-		Password: cfg.DBPassword,
-		DBName:   cfg.DBName,
-	})
-	if err != nil {
-		logger.Fatal("Failed to initialize database client: %v", err)
-	}
-	defer dbClient.Close()
-
-	// Create database tables
-	if err := dbClient.CreateDispatcherTables(); err != nil {
-		logger.Fatal("Failed to create database tables: %v", err)
-	}
-	logger.Info("Database initialized successfully")
 }
 
 func logReportingStatus(cfg *config.DispatcherConfig) {
