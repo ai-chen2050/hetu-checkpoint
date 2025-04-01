@@ -103,7 +103,10 @@ func handleRequest(w http.ResponseWriter, r *http.Request, cfg *config.Dispatche
 
 	// Report BLS signatures if enabled
 	if cfg.EnableReport {
-		go ReportBLSSignaturesByCosmosTx(validResponses, &req, cfg)
+		// Report to Ethereum if aggregation was successful
+		if aggregatedCkpt != nil {
+			go ReportCheckpointWithRetry(aggregatedCkpt, cfg, 3)
+		}
 	}
 
 	// Convert binary responses to map for JSON response

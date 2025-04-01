@@ -9,5 +9,8 @@
     "EnableReport": true,
     "ChainGRpcURL": "localhost:9090",
     "CometBFTSvr": "localhost:26657",
-    "ChainID": "hetu_560002-1"
+    "ChainID": "hetu_560002-1",
+    "EthRpcURL": "http://localhost:8545",
+    "EthChainID": 560002,
+    "ValidatorStakingAddress": "0xAD3Eade0d03C3aE3265283FddA1292E24B93bD71"
 }
