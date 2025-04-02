@@ -34,3 +34,12 @@ type AggregatedCheckpoint struct {
 	ValidatorCount int       `db:"validator_count"`
 	CreatedAt      time.Time `db:"created_at"`
 }
+
+// RewardDistribution represents a reward distribution record
+type RewardDistribution struct {
+	ID              int64     `db:"id"`
+	EpochNum        uint64    `db:"epoch_num"`
+	TransactionHash string    `db:"transaction_hash"`
+	Status          string    `db:"status"`
+	CreatedAt       time.Time `db:"created_at"`
+}

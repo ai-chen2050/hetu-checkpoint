@@ -106,6 +106,19 @@ func handleRequest(w http.ResponseWriter, r *http.Request, cfg *config.Dispatche
 		// Report to Ethereum if aggregation was successful
 		if aggregatedCkpt != nil {
 			go ReportCheckpointWithRetry(aggregatedCkpt, cfg, 3)
+
+			// Check if we need to distribute rewards
+			currentEpoch := aggregatedCkpt.Ckpt.EpochNum
+			interval := cfg.RewardDistrInterval
+			if interval <= 0 {
+				interval = 2 // Default to distributing two epoch
+			}
+
+			if currentEpoch%uint64(interval) == 0 {
+				time.Sleep(1 * time.Second)
+				// Distribute rewards for the current epoch
+				go DistributeRewardsWithRetry(currentEpoch, cfg, 3)
+			}
 		}
 	}
 

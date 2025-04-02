@@ -127,6 +127,20 @@ func (c *DBClient) CreateDispatcherTables() error {
 		return fmt.Errorf("error creating aggregated_checkpoints table: %v", err)
 	}
 
+	// Create reward_distributions table
+	_, err = c.db.Exec(`
+		CREATE TABLE IF NOT EXISTS reward_distributions (
+			id SERIAL PRIMARY KEY,
+			epoch_num BIGINT NOT NULL,
+			transaction_hash TEXT NOT NULL,
+			status VARCHAR(20) NOT NULL,
+			created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+		)
+	`)
+	if err != nil {
+		return fmt.Errorf("error creating reward_distributions table: %v", err)
+	}
+
 	return nil
 }
 
@@ -290,4 +304,62 @@ func (c *DBClient) GetLatestAggregatedCheckpoints(limit int) ([]*AggregatedCheck
 		return nil, fmt.Errorf("error getting latest aggregated checkpoints: %v", err)
 	}
 	return checkpoints, nil
+}
+
+// InsertRewardDistribution inserts a new reward distribution record
+func (c *DBClient) InsertRewardDistribution(
+	epochNum uint64,
+	transactionHash string,
+	status string,
+) (*RewardDistribution, error) {
+	query := `
+		INSERT INTO reward_distributions (
+			epoch_num, transaction_hash, status, created_at
+		)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id, epoch_num, transaction_hash, status, created_at
+	`
+	distribution := &RewardDistribution{}
+	err := c.db.QueryRowx(
+		query,
+		epochNum,
+		transactionHash,
+		status,
+		time.Now(),
+	).StructScan(distribution)
+	if err != nil {
+		return nil, fmt.Errorf("error inserting reward distribution: %v", err)
+	}
+	return distribution, nil
+}
+
+// GetLastRewardDistribution retrieves the last reward distribution record
+func (c *DBClient) GetLastRewardDistribution() (*RewardDistribution, error) {
+	query := `
+		SELECT * FROM reward_distributions
+		ORDER BY epoch_num DESC
+		LIMIT 1
+	`
+	distribution := &RewardDistribution{}
+	err := c.db.Get(distribution, query)
+	if err != nil {
+		return nil, fmt.Errorf("error getting last reward distribution: %v", err)
+	}
+	return distribution, nil
+}
+
+// IsEpochRewardDistributed checks if rewards for a specific epoch have been distributed
+func (c *DBClient) IsEpochRewardDistributed(epochNum uint64) (bool, error) {
+	query := `
+		SELECT EXISTS(
+			SELECT 1 FROM reward_distributions
+			WHERE epoch_num = $1 AND status = 'SUCCESS'
+		)
+	`
+	var exists bool
+	err := c.db.Get(&exists, query, epochNum)
+	if err != nil {
+		return false, fmt.Errorf("error checking if epoch reward was distributed: %v", err)
+	}
+	return exists, nil
 }
