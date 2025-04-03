@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  validator:
+    build:
+      context: .
+      dockerfile: docker/validator/Dockerfile
+    ports:
+      - "9081:9081" # HTTP port
+    volumes:
+      - ./docker/config:/app/config
+      - ./keys:/app/keys
+    command: >
+      run --config /app/config/val_config.json --keys /app/keys/validator.json --enable-db --log-level INFO
+    environment:
+      - TZ=UTC
+    depends_on:
+      - postgres-val
+    restart: unless-stopped
+    networks:
+      - checkpoint-network
+
+  postgres-val:
+    image: postgres:14-alpine
+    container_name: postgres-validator
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=checkpoint_validator
+    ports:
+      - "5433:5432" # Different port to avoid conflict with dispatcher's postgres
+    volumes:
+      - postgres-validator-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - checkpoint-network
+
+  portainer-val:
+    image: portainer/portainer-ce:latest
+    container_name: portainer-validator
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - portainer-validator-data:/data
+    ports:
+      - "9001:9000" # Use a different port to avoid conflict with dispatcher's Portainer
+    networks:
+      - checkpoint-network
+
+volumes:
+  postgres-validator-data:
+  portainer-validator-data:
+
+
+networks:
+  checkpoint-network:
+    driver: bridge

@@ -4,7 +4,7 @@ services:
   dispatcher:
     build:
       context: .
-      dockerfile: build/dispatcher/Dockerfile
+      dockerfile: docker/dispatcher/Dockerfile
     ports:
       - "8080:8080"
     volumes:
@@ -14,7 +14,7 @@ services:
   validator:
     build:
       context: .
-      dockerfile: build/validator/Dockerfile
+      dockerfile: docker/validator/Dockerfile
     volumes:
       - ./config:/app/config
     command: ["./validator", "--config", "config/validator.yaml"]

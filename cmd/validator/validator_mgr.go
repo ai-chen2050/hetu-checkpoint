@@ -115,8 +115,6 @@ func startListeningServer(cfg *config.ValidatorConfig) {
 		if err != nil {
 			logger.Fatal("Failed to start TCP server: %v", err)
 		}
-		// Update listen address with actual port
-		cfg.ListenAddr = listener.Addr().String()
 	} else {
 		// Use specified port
 		portStr := fmt.Sprintf(":%d", cfg.Port)
@@ -125,7 +123,9 @@ func startListeningServer(cfg *config.ValidatorConfig) {
 			logger.Fatal("Failed to start TCP server: %v", err)
 		}
 	}
-
+	
+	// Update listen address with actual port
+	cfg.ListenAddr = listener.Addr().String()
 	logger.Info("Validator listening on %s", cfg.ListenAddr)
 
 	// Accept connections

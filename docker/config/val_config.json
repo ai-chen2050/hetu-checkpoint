@@ -1,0 +1,17 @@
+{
+    "DBhost": "postgres-validator",
+    "DBport": 5432,
+    "DBuser": "postgres",
+    "DBpassword": "postgres",
+    "DBname": "validator_db",
+    "dispatchertcp": "dispatcher:8081",
+    "ListenAddr": "validator",
+    "port": 0,
+    "ChainRpcURL": "http://192.168.1.2:8545",
+    "StakingTokenAddress": "0xCffc027B6C6B1c8E3d0568bAB038876ae22B491D",
+    "ValidatorStakingAddress": "0xAD3Eade0d03C3aE3265283FddA1292E24B93bD71",
+    "DispatcherURL": "http://192.168.1.2:8080",
+    "ChainGRpcURL": "192.168.1.2:9090",
+    "CometBFTSvr": "192.168.1.2:26657",
+    "ChainID": "hetu_560002-1"
+}

@@ -1,0 +1,17 @@
+{
+    "DBhost": "postgres-dispatcher",
+    "DBport": 5432,
+    "DBuser": "postgres",
+    "DBpassword": "postgres",
+    "DBname": "checkpoint",
+    "Httpport": 8080,
+    "Tcpport": 8081,
+    "EnableReport": true,
+    "ChainGRpcURL": "192.168.1.2:9090",
+    "CometBFTSvr": "192.168.1.2:26657",
+    "ChainID": "hetu_560002-1",
+    "EthRpcURL": "http://192.168.1.2:8545",
+    "EthChainID": 560002,
+    "ValidatorStakingAddress": "0xAD3Eade0d03C3aE3265283FddA1292E24B93bD71",
+    "RewardDistrInterval": 2
+}

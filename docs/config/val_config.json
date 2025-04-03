@@ -5,6 +5,7 @@
     "DBpassword": "hetu",
     "DBname": "validator_db",
     "dispatchertcp": "localhost:8081",
+    "ListenAddr": "192.168.1.2",
     "port": 0,
     "ChainRpcURL": "http://localhost:8545",
     "StakingTokenAddress": "0xCffc027B6C6B1c8E3d0568bAB038876ae22B491D",

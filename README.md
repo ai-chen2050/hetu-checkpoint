@@ -92,8 +92,11 @@ chmod +x start.sh stop.sh
 # Start with 3 validators
 ./start.sh -n 3
 
-# Start with custom config directory
-./start.sh -n 4 -c /path/to/config
+# Start with custom config directory (Native)
+./scripts/start.sh -n 3 -c docs/config -b build -k keys
+
+# Start with custom config directory (docker-compose)
+./scripts/start.sh -n 3 -c docs/config -b build -k keys -d
 
 # Stop all processes
 ./stop.sh

@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  dispatcher:
+    build:
+      context: .
+      dockerfile: docker/dispatcher/Dockerfile
+    ports:
+      - "8080:8080"  # HTTP port
+      - "8081:8081"  # TCP port for validator connections
+    volumes:
+      - ./docker/config:/app/config
+      - ./keys:/app/keys
+    command: >
+      run
+      --config /app/config/dis_config.json
+      --keys /app/keys/dispatcher.json
+      --enable-db
+      --log-level INFO
+    environment:
+      - TZ=UTC
+    depends_on:
+      - postgres-dis
+    restart: unless-stopped
+    networks:
+      - checkpoint-network
+
+  postgres-dis:
+    image: postgres:14-alpine
+    container_name: postgres-dispatcher
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=checkpoint
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - checkpoint-network
+
+  portainer-dis:
+    image: portainer/portainer-ce:latest
+    container_name: portainer-dispatcher
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - portainer-dispatcher-data:/data
+    ports:
+      - "9000:9000"
+    networks:
+      - checkpoint-network
+
+volumes:
+  postgres-data:
+  portainer-dispatcher-data:
+
+networks:
+  checkpoint-network:
+    driver: bridge 
