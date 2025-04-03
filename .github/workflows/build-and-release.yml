@@ -11,21 +11,22 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    container:
+      image: golang:1.23.4-alpine
     steps:
-      - uses: actions/checkout@v3
+      - name: Install Git and build tools
+        run: |
+          apk add --no-cache git make gcc musl-dev
 
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: "1.23.4"
+      - uses: actions/checkout@v3
 
       - name: Build
         run: |
-          go build -v ./cmd/dispatcher
-          go build -v ./cmd/validator
+          make build
 
       - name: Test
-        run: go test -v ./...
+        run: |
+          make test
 
   docker:
     needs: build
@@ -62,6 +63,7 @@ jobs:
           tags: hetuproject/checkpoint-dispatcher:${{ steps.meta.outputs.version }},hetuproject/checkpoint-dispatcher:latest
           cache-from: type=registry,ref=hetuproject/checkpoint-dispatcher:buildcache
           cache-to: type=registry,ref=hetuproject/checkpoint-dispatcher:buildcache,mode=max
+          platforms: linux/amd64,linux/arm64
 
       - name: Build and push validator image
         uses: docker/build-push-action@v4
@@ -72,41 +74,62 @@ jobs:
           tags: hetuproject/checkpoint-validator:${{ steps.meta.outputs.version }},hetuproject/checkpoint-validator:latest
           cache-from: type=registry,ref=hetuproject/checkpoint-validator:buildcache
           cache-to: type=registry,ref=hetuproject/checkpoint-validator:buildcache,mode=max
+          platforms: linux/amd64,linux/arm64
 
   release:
     needs: build
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    container:
+      image: golang:1.23.4-alpine
     steps:
-      - uses: actions/checkout@v3
+      - name: Install build tools
+        run: |
+          apk add --no-cache git make gcc musl-dev zip tar
 
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: "1.23.4"
+      - uses: actions/checkout@v3
 
       - name: Build binaries
         run: |
           # Build for multiple platforms
-          GOOS=linux GOARCH=amd64 go build -o build/linux/amd64/dispatcher ./cmd/dispatcher
-          GOOS=linux GOARCH=amd64 go build -o build/linux/amd64/validator ./cmd/validator
-          GOOS=darwin GOARCH=amd64 go build -o build/darwin/amd64/dispatcher ./cmd/dispatcher
-          GOOS=darwin GOARCH=amd64 go build -o build/darwin/amd64/validator ./cmd/validator
-          GOOS=windows GOARCH=amd64 go build -o build/windows/amd64/dispatcher.exe ./cmd/dispatcher
-          GOOS=windows GOARCH=amd64 go build -o build/windows/amd64/validator.exe ./cmd/validator
+          mkdir -p build/linux/amd64 build/linux/arm64 build/darwin/amd64 build/windows/amd64
+
+          # Linux amd64
+          CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo -o build/linux/amd64/dispatcher ./cmd/dispatcher
+          CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo -o build/linux/amd64/validator ./cmd/validator
+
+          # Linux arm64
+          CGO_ENABLED=1 GOOS=linux GOARCH=arm64 go build -a -installsuffix cgo -o build/linux/arm64/dispatcher ./cmd/dispatcher
+          CGO_ENABLED=1 GOOS=linux GOARCH=arm64 go build -a -installsuffix cgo -o build/linux/arm64/validator ./cmd/validator
+
+          # macOS (Darwin)
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -o build/darwin/amd64/dispatcher ./cmd/dispatcher
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -o build/darwin/amd64/validator ./cmd/validator
+
+          # Windows
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o build/windows/amd64/dispatcher.exe ./cmd/dispatcher
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o build/windows/amd64/validator.exe ./cmd/validator
 
       - name: Create release archives
         run: |
           mkdir -p release
           cd build/linux/amd64 && tar -czvf ../../../release/checkpoint-linux-amd64.tar.gz * && cd -
+          cd build/linux/arm64 && tar -czvf ../../../release/checkpoint-linux-arm64.tar.gz * && cd -
           cd build/darwin/amd64 && tar -czvf ../../../release/checkpoint-darwin-amd64.tar.gz * && cd -
           cd build/windows/amd64 && zip -r ../../../release/checkpoint-windows-amd64.zip * && cd -
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: release-binaries
+          path: release/
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
             release/checkpoint-linux-amd64.tar.gz
+            release/checkpoint-linux-arm64.tar.gz
             release/checkpoint-darwin-amd64.tar.gz
             release/checkpoint-windows-amd64.zip
           draft: false
