@@ -104,7 +104,7 @@ func handleHeartbeat(conn net.Conn) {
 }
 
 // startListeningServer starts a TCP server to listen for signing requests
-func startListeningServer(cfg *config.ValidatorConfig) {
+func startListeningServer(cfg *config.ValidatorConfig, ready chan struct{}) {
 	// Start TCP server to accept connections
 	var listener net.Listener
 	var err error
@@ -123,12 +123,20 @@ func startListeningServer(cfg *config.ValidatorConfig) {
 			logger.Fatal("Failed to start TCP server: %v", err)
 		}
 	}
-	
+
 	// Update listen address with actual port
 	cfg.ListenAddr = listener.Addr().String()
 	logger.Info("Validator listening on %s", cfg.ListenAddr)
 
-	// Accept connections
+	// Signal that the server is ready
+	close(ready)
+
+	// Start accepting connections
+	acceptConnections(listener)
+}
+
+// acceptConnections handles incoming connections
+func acceptConnections(listener net.Listener) {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {

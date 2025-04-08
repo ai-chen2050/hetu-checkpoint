@@ -75,7 +75,7 @@ start_with_docker() {
         cp "${DOCKER_COMPOSE_VALIDATOR}" "docker-compose-validator-${i}.yml"
 
         # Update the validator ID and port in the docker-compose file
-        sed -i "s/--id 0/--id ${i}/g" "docker-compose-validator-${i}.yml"
+        # sed -i "s/--id 0/--id ${i}/g" "docker-compose-validator-${i}.yml"
         sed -i "s/- \"8081:8081\"/- \"$((8081 + i)):8081\"/g" "docker-compose-validator-${i}.yml"
         sed -i "s/- \"9001:9000\"/- \"$((9001 + i)):9000\"/g" "docker-compose-validator-${i}.yml"
         sed -i "s/- \"5433:5432\"/- \"$((5433 + i)):5432\"/g" "docker-compose-validator-${i}.yml"
@@ -129,7 +129,7 @@ start_natively() {
         fi
 
         # Start validator
-        "${BINARY_DIR}/validator" run --config "${CONFIG_DIR}/val_config.json" --keys="${KEYS_DIR}/validator_${i}.json" --id "${i}" --enable-db --log-level=info >logs/validator_${i}.log 2>&1 &
+        "${BINARY_DIR}/validator" run --config "${CONFIG_DIR}/val_config.json" --keys="${KEYS_DIR}/validator_${i}.json" --enable-db --log-level=info >logs/validator_${i}.log 2>&1 &
         VALIDATOR_PIDS["${i}"]=$!
         echo "Validator ${i} started with PID: ${VALIDATOR_PIDS[${i}]}"
         sleep 1

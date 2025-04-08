@@ -89,8 +89,14 @@ func runValidator(cmd *cobra.Command, args []string) {
 }
 
 func startValidatorService(cfg *config.ValidatorConfig) {
+	// Create a channel to signal when the listening server is ready
+	serverReady := make(chan struct{})
+
 	// Start TCP server in a goroutine
-	go startListeningServer(cfg)
+	go startListeningServer(cfg, serverReady)
+
+	// Wait for the server to be ready before connecting to dispatcher
+	<-serverReady
 
 	// Connect to dispatcher and maintain connection
 	maintainDispatcherConnection(cfg)
