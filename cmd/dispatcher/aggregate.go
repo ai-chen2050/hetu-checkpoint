@@ -48,7 +48,7 @@ func AggregateSignatures(validResponses map[string][]byte, req *config.Request, 
 	// Calculate total power
 	var totalPower uint64 = 0
 	for _, val := range valSetResp.ValidatorWithBlsKeys {
-		totalPower += uint64(val.VotingPower)
+		totalPower += val.VotingPower
 	}
 
 	// Convert to types.ValidatorSet

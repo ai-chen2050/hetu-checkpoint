@@ -112,12 +112,12 @@ func (c *DBClient) CreateDispatcherTables() error {
 		CREATE TABLE IF NOT EXISTS aggregated_checkpoints (
 			id SERIAL PRIMARY KEY,
 			request_id INTEGER REFERENCES sign_requests(id),
-			epoch_num BIGINT NOT NULL,
+			epoch_num NUMERIC NOT NULL,
 			block_hash TEXT NOT NULL,
 			bitmap TEXT NOT NULL,
 			bls_multi_sig TEXT,
 			bls_aggr_pk TEXT,
-			power_sum BIGINT NOT NULL,
+			power_sum NUMERIC NOT NULL,
 			status VARCHAR(20) NOT NULL,
 			validator_count INTEGER NOT NULL,
 			created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -131,7 +131,7 @@ func (c *DBClient) CreateDispatcherTables() error {
 	_, err = c.db.Exec(`
 		CREATE TABLE IF NOT EXISTS reward_distributions (
 			id SERIAL PRIMARY KEY,
-			epoch_num BIGINT NOT NULL,
+			epoch_num NUMERIC NOT NULL,
 			transaction_hash TEXT NOT NULL,
 			status VARCHAR(20) NOT NULL,
 			created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -259,12 +259,12 @@ func (c *DBClient) InsertAggregatedCheckpoint(
 	err := c.db.QueryRowx(
 		query,
 		requestID,
-		epochNum,
+		fmt.Sprintf("%d", epochNum), // Convert uint64 to string for NUMERIC
 		blockHash,
 		bitmap,
 		blsMultiSig,
 		blsAggrPk,
-		powerSum,
+		fmt.Sprintf("%d", powerSum), // Convert uint64 to string for NUMERIC
 		status,
 		validatorCount,
 		time.Now(),
