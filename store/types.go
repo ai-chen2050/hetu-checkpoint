@@ -29,7 +29,7 @@ type AggregatedCheckpoint struct {
 	Bitmap         string    `db:"bitmap"`
 	BlsMultiSig    string    `db:"bls_multi_sig"`
 	BlsAggrPk      string    `db:"bls_aggr_pk"`
-	PowerSum       uint64    `db:"power_sum"`
+	PowerSum       string    `db:"power_sum"`
 	Status         string    `db:"status"`
 	ValidatorCount int       `db:"validator_count"`
 	CreatedAt      time.Time `db:"created_at"`

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -144,7 +143,7 @@ func queryBlsKeys(cmd *cobra.Command, args []string) {
 				fmt.Printf("Validator #%d:\n", i+1)
 				fmt.Printf("  Address: %s\n", validator.ValidatorAddress)
 				fmt.Printf("  BLS Public Key: %s\n", validator.BlsPubKeyHex)
-				fmt.Printf("  Voting Power: %s\n", strconv.FormatUint(validator.VotingPower, 10))
+				fmt.Printf("  Voting Power: %s\n", validator.VotingPower)
 				fmt.Println("-----------------------------------")
 			}
 		}

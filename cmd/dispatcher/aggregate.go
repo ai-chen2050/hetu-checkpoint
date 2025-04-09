@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"math/big"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -46,9 +47,13 @@ func AggregateSignatures(validResponses map[string][]byte, req *config.Request, 
 	}
 
 	// Calculate total power
-	var totalPower uint64 = 0
+	var totalPower *big.Int = big.NewInt(0)
 	for _, val := range valSetResp.ValidatorWithBlsKeys {
-		totalPower += val.VotingPower
+		power, ok := new(big.Int).SetString(val.VotingPower, 10)
+		if !ok {
+			return nil, fmt.Errorf("failed to parse voting power for validator %s: %s", val.ValidatorAddress, val.VotingPower)
+		}
+		totalPower.Add(totalPower, power)
 	}
 
 	// Convert to types.ValidatorSet
@@ -56,7 +61,7 @@ func AggregateSignatures(validResponses map[string][]byte, req *config.Request, 
 	for i, val := range valSetResp.ValidatorWithBlsKeys {
 		validatorSet[i] = types.Validator{
 			Addr:  common.HexToAddress(val.ValidatorAddress).Bytes(),
-			Power: int64(val.VotingPower),
+			Power: val.VotingPower,
 		}
 	}
 

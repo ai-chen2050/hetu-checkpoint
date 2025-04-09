@@ -242,7 +242,7 @@ func (c *DBClient) InsertAggregatedCheckpoint(
 	bitmap string,
 	blsMultiSig string,
 	blsAggrPk string,
-	powerSum uint64,
+	powerSum string,
 	status string,
 	validatorCount int,
 ) (*AggregatedCheckpoint, error) {
@@ -264,7 +264,7 @@ func (c *DBClient) InsertAggregatedCheckpoint(
 		bitmap,
 		blsMultiSig,
 		blsAggrPk,
-		fmt.Sprintf("%d", powerSum), // Convert uint64 to string for NUMERIC
+		powerSum,
 		status,
 		validatorCount,
 		time.Now(),

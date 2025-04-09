@@ -68,7 +68,10 @@ func ReportCheckpointToEthereum(aggregatedCkpt *types.RawCheckpointWithMeta, cfg
 	// Convert checkpoint data for contract call
 	epochNum := aggregatedCkpt.Ckpt.EpochNum
 	blockHash := common.BytesToHash(*aggregatedCkpt.Ckpt.BlockHash)
-	powerSum := aggregatedCkpt.PowerSum
+	powerSum, ok := new(big.Int).SetString(aggregatedCkpt.PowerSum, 10)
+	if !ok {
+		return fmt.Errorf("failed to parse power sum: %s", aggregatedCkpt.PowerSum)
+	}
 
 	var blsMultiSig []byte
 	if aggregatedCkpt.Ckpt.BlsMultiSig != nil {

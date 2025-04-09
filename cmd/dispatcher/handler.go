@@ -111,7 +111,7 @@ func handleRequest(w http.ResponseWriter, r *http.Request, cfg *config.Dispatche
 			currentEpoch := aggregatedCkpt.Ckpt.EpochNum
 			interval := cfg.RewardDistrInterval
 			if interval <= 0 {
-				interval = 2 // Default to distributing two epoch
+				interval = 10 // Default to distributing ten epochs
 			}
 
 			if currentEpoch%uint64(interval) == 0 {

@@ -6,6 +6,7 @@ CONFIG_DIR="docs/config"
 BINARY_DIR="build"
 KEYS_DIR="keys"
 USE_DOCKER=false
+REGISTER_AGAIN=false
 DOCKER_COMPOSE_DISPATCHER="docker-compose-dispatcher.yml"
 DOCKER_COMPOSE_VALIDATOR="docker-compose-validator.yml"
 
@@ -17,18 +18,20 @@ usage() {
     echo "  -b: Binary directory (default: ${BINARY_DIR})"
     echo "  -k: Keys directory (default: ${KEYS_DIR})"
     echo "  -d: Use Docker Compose (default: false)"
+    echo "  -r: Register and stake validator again (default: false)"
     echo "  -h: Display this help message"
     exit 1
 }
 
 # Parse command line arguments
-while getopts "n:c:b:k:dh" opt; do
+while getopts "n:c:b:k:drh" opt; do
     case $opt in
     n) NUM_VALIDATORS=$OPTARG ;;
     c) CONFIG_DIR=$OPTARG ;;
     b) BINARY_DIR=$OPTARG ;;
     k) KEYS_DIR=$OPTARG ;;
     d) USE_DOCKER=true ;;
+    r) REGISTER_AGAIN=true ;;
     h) usage ;;
     *) usage ;;
     esac
@@ -64,6 +67,12 @@ start_with_docker() {
             echo "Generating key for validator ${i}..."
             "${BINARY_DIR}/validator" generate-key --output="${KEYS_DIR}/validator_${i}.json"
 
+            # Register and stake validator
+            echo "Registering and staking validator ${i}..."
+            "${BINARY_DIR}/validator" register-and-stake --config "${CONFIG_DIR}/val_config.json" --keys "${KEYS_DIR}/validator_${i}.json" --amount 500
+        fi
+
+        if [ "$REGISTER_AGAIN" = true ]; then
             # Register and stake validator
             echo "Registering and staking validator ${i}..."
             "${BINARY_DIR}/validator" register-and-stake --config "${CONFIG_DIR}/val_config.json" --keys "${KEYS_DIR}/validator_${i}.json" --amount 500
@@ -124,6 +133,12 @@ start_natively() {
             "${BINARY_DIR}/validator" generate-key --output="${KEYS_DIR}/validator_${i}.json"
 
             # Register and stake validator
+            echo "Registering and staking validator ${i}..."
+            "${BINARY_DIR}/validator" register-and-stake --config "${CONFIG_DIR}/val_config.json" --keys "${KEYS_DIR}/validator_${i}.json" --amount 500
+        fi
+        
+        # Register and stake validator
+        if [ "$REGISTER_AGAIN" = true ]; then
             echo "Registering and staking validator ${i}..."
             "${BINARY_DIR}/validator" register-and-stake --config "${CONFIG_DIR}/val_config.json" --keys "${KEYS_DIR}/validator_${i}.json" --amount 500
         fi

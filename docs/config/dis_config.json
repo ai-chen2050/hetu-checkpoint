@@ -3,7 +3,7 @@
     "DBport": 5432,
     "DBuser": "postgres",
     "DBpassword": "hetu",
-    "DBname": "bls_db",
+    "DBname": "bls_db3",
     "Httpport": 8080,
     "Tcpport": 8081,
     "EnableReport": true,
@@ -12,6 +12,6 @@
     "ChainID": "hetu_560002-1",
     "EthRpcURL": "http://localhost:8545",
     "EthChainID": 560002,
-    "ValidatorStakingAddress": "0xAD3Eade0d03C3aE3265283FddA1292E24B93bD71",
+    "ValidatorStakingAddress": "0x59FF9362DE95fcd19983677BcCB2f23062d2E14E",
     "RewardDistrInterval": 2
 }
