@@ -42,12 +42,6 @@ Run integration tests:
 make test-integration
 ```
 
-### 3. Smoke Tests
-Run smoke tests:
-```bash
-make test-smoke
-```
-
 ## Core Test Cases
 
 ### Dispatcher Service
@@ -60,7 +54,6 @@ make test-smoke
 2. **Checkpoint Validation**
    - Test successful validation of valid checkpoints
    - Test validation of corrupted checkpoints
-   - Test validation of expired checkpoints
    - Test validation with different validation rules
 
 3. **Storage Integration**
@@ -79,7 +72,6 @@ make test-smoke
 
 1. **Validation Logic**
    - Test signature verification
-   - Test timestamp validation
    - Test data integrity checks
    - Test custom validation rules
    - Test validation performance
@@ -89,7 +81,6 @@ make test-smoke
    - Test validator-storage integration
    - Test validator-API integration
    - Test validator scaling
-   - Test validator failover
 
 ### Performance Tests
 
@@ -121,34 +112,15 @@ make test-smoke
    - Test data integrity
    - Test data privacy
    - Test secure communication
-   - Test audit logging
 
 ## Test Environment
 
 ### Local Development
 ```bash
 # Start local development environment
-make dev-up
-
-# Run all tests
-make test-all
-
-# Clean up
-make dev-down
+chmod +x ./scripts/start 
+./scripts/start 
 ```
-
-### CI/CD Pipeline
-Tests are automatically run in the CI/CD pipeline for:
-- Pull requests
-- Main branch commits
-- Release tags
-
-## Test Results
-
-Test results are available in:
-- Console output
-- `test-results/` directory
-- CI/CD pipeline artifacts
 
 ## Contributing
 

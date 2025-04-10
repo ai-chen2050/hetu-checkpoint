@@ -27,4 +27,13 @@ To work with these contracts:
 2. Use the generated ABI files for contract interaction
 3. Deploy using the compiled bytecode (BIN files)
 
+```shell
+npx hardhat help
+npx hardhat test
+REPORT_GAS=true npx hardhat test
+npx hardhat run scripts/deployHGT.js
+# Or local chain
+npx hardhat run scripts/deploy.js --network local
+```
+
 For detailed implementation and usage, refer to the individual contract files.

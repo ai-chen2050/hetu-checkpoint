@@ -6,6 +6,7 @@ CONFIG_DIR="docs/config"
 BINARY_DIR="build"
 KEYS_DIR="keys"
 USE_DOCKER=false
+GENERATE_KEYS=false
 REGISTER_AGAIN=false
 DOCKER_COMPOSE_DISPATCHER="docker-compose-dispatcher.yml"
 DOCKER_COMPOSE_VALIDATOR="docker-compose-validator.yml"
@@ -17,6 +18,7 @@ usage() {
     echo "  -c: Config directory (default: ${CONFIG_DIR})"
     echo "  -b: Binary directory (default: ${BINARY_DIR})"
     echo "  -k: Keys directory (default: ${KEYS_DIR})"
+    echo "  -g: Only generate keys (default: false)"
     echo "  -d: Use Docker Compose (default: false)"
     echo "  -r: Register and stake validator again (default: false)"
     echo "  -h: Display this help message"
@@ -24,12 +26,13 @@ usage() {
 }
 
 # Parse command line arguments
-while getopts "n:c:b:k:drh" opt; do
+while getopts "n:c:b:k:drgh" opt; do
     case $opt in
     n) NUM_VALIDATORS=$OPTARG ;;
     c) CONFIG_DIR=$OPTARG ;;
     b) BINARY_DIR=$OPTARG ;;
     k) KEYS_DIR=$OPTARG ;;
+    g) GENERATE_KEYS=true ;;
     d) USE_DOCKER=true ;;
     r) REGISTER_AGAIN=true ;;
     h) usage ;;
@@ -54,6 +57,16 @@ start_with_docker() {
         echo "Generating dispatcher key..."
         mkdir -p "${KEYS_DIR}"
         "${BINARY_DIR}/dispatcher" generate-key --output="${KEYS_DIR}/dispatcher.json"
+    fi
+
+    if [ "$GENERATE_KEYS" = true ]; then
+        for ((i = 0; i < "${NUM_VALIDATORS}"; i++)); do
+            if [ ! -f "${KEYS_DIR}/validator_${i}.json" ]; then
+                echo "Generating key for validator ${i}..."
+                "${BINARY_DIR}/validator" generate-key --output="${KEYS_DIR}/validator_${i}.json"
+            fi
+        done
+        exit 0
     fi
 
     # Start dispatcher
@@ -108,6 +121,16 @@ start_natively() {
         echo "Generating dispatcher key..."
         mkdir -p "${KEYS_DIR}"
         "${BINARY_DIR}/dispatcher" generate-key --output="${KEYS_DIR}/dispatcher.json"
+    fi
+
+    if [ "$GENERATE_KEYS" = true ]; then
+        for ((i = 0; i < "${NUM_VALIDATORS}"; i++)); do
+            if [ ! -f "${KEYS_DIR}/validator_${i}.json" ]; then
+                echo "Generating key for validator ${i}..."
+                "${BINARY_DIR}/validator" generate-key --output="${KEYS_DIR}/validator_${i}.json"
+            fi
+        done
+        exit 0
     fi
 
     # Start dispatcher
