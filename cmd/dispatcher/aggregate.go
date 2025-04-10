@@ -65,6 +65,7 @@ func AggregateSignatures(validResponses map[string][]byte, req *config.Request, 
 		}
 	}
 
+	sortedValSet := types.NewSortedValidatorSet(validatorSet)
 	// Create a copy of the checkpoint with meta
 	ckptWithMeta := req.CheckpointWithMeta
 
@@ -87,7 +88,7 @@ func AggregateSignatures(validResponses map[string][]byte, req *config.Request, 
 		}
 
 		// Accumulate the signature
-		err = ckptWithMeta.Accumulate(validatorSet, valAddr, blsPubkey, blsSigBytes, totalPower)
+		err = ckptWithMeta.Accumulate(sortedValSet, valAddr, blsPubkey, blsSigBytes, totalPower)
 		if err != nil {
 			logger.Error("Failed to accumulate BLS signature for validator %s: %v", val.ValidatorAddress, err)
 			continue

@@ -13,5 +13,5 @@
     "EthRpcURL": "http://localhost:8545",
     "EthChainID": 560002,
     "ValidatorStakingAddress": "0x59FF9362DE95fcd19983677BcCB2f23062d2E14E",
-    "RewardDistrInterval": 2
+    "RewardDistrInterval": 5
 }
