@@ -16,7 +16,7 @@ type DispatcherConfig struct {
 	EthRpcURL               string `json:"eth_rpc_url"`
 	EthChainID              int64  `json:"eth_chain_id"`
 	ValidatorStakingAddress string `json:"validator_staking_address"`
-	RewardDistrInterval     int    `json:"reward_distr_interval"` // Number of epochs between reward distributions
+	RewardDistrInterval     int    `json:"reward_distr_interval"` // Number of epochs behind the current epoch to start reward distributions
 }
 
 // ValidatorConfig holds configuration for the validator service

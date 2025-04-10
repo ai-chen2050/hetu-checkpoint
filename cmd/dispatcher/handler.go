@@ -114,11 +114,7 @@ func handleRequest(w http.ResponseWriter, r *http.Request, cfg *config.Dispatche
 				interval = 10 // Default to distributing ten epochs
 			}
 
-			if currentEpoch%uint64(interval) == 0 {
-				time.Sleep(1 * time.Second)
-				// Distribute rewards for the current epoch
-				go DistributeRewardsWithRetry(currentEpoch, cfg, 3)
-			}
+			go DistributeRewardsWithRetry(currentEpoch - uint64(interval), cfg, 3)
 		}
 	}
 
