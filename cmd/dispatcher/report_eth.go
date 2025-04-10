@@ -200,8 +200,8 @@ func DistributeRewards(epochNum uint64, cfg *config.DispatcherConfig) error {
 		return fmt.Errorf("failed to suggest gas price: %v", err)
 	}
 	auth.GasPrice = gasPrice
-	auth.GasLimit = 5000000 // Set a higher gas limit for distribution
-
+	auth.GasLimit = 90000000 // Set a higher gas limit for distribution	
+	
 	// Log the distribution
 	logger.Info("Distributing rewards for epoch %d", epochNum)
 

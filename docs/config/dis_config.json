@@ -12,6 +12,6 @@
     "ChainID": "hetu_560002-1",
     "EthRpcURL": "http://localhost:8545",
     "EthChainID": 560002,
-    "ValidatorStakingAddress": "0x59FF9362DE95fcd19983677BcCB2f23062d2E14E",
+    "ValidatorStakingAddress": "0xE7F6C60D813a17e2FA16869371351d8C800c7fC1",
     "RewardDistrInterval": 5
 }
