@@ -80,7 +80,7 @@ make build-validator
 ### Running the Muti-Node
 
 ```bash
-chmod +x start.sh stop.sh
+chmod +x ./scripts/start.sh ./scripts/stop.sh
 ```
 
 - Usage examples:
