@@ -37,10 +37,8 @@ make test
 ```
 
 ### 2. Integration Tests
-Run integration tests:
-```bash
-make test-integration
-```
+Integration tests:
+Please refer to [integration](./Integration.md)
 
 ## Core Test Cases
 
