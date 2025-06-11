@@ -1,5 +1,4 @@
 const { ethers } = require("hardhat");
-const { fromBech32 } = require('@cosmjs/encoding');
 const fs = require('fs');
 const path = require('path');
 
